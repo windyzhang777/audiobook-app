@@ -43,19 +43,106 @@ export const BookReaderScreen = () => {
   // Layout
   const [textSize, setTextSize] = useState<number>(18);
   const [scrollViewHeight, setScrollViewHeight] = useState<number>(0);
+  const [contentHeight, setContentHeight] = useState<number>(0);
   const scrollViewRef = useRef<ScrollView>(null);
+  const lineRefs = useRef<{ [key: number]: View | null }>({});
+  const linePositionsRef = useRef<{ [key: number]: { y: number; height: number } }>({});
+  const hasScrolledToInitialPosition = useRef<boolean>(false);
 
-  console.log(`currentLineIndex :`, currentLineIndex);
-  console.log(`isPlaying :`, isPlaying);
-  console.log(`lines.length :`, lines.length);
+  console.log(`currentLineIndex, lines.length :`, currentLineIndex, lines.length);
 
   useEffect(() => {
     void loadBook();
+    hasScrolledToInitialPosition.current = false; // Reset flag when book changes
 
     return () => {
       speechService.stop();
     };
   }, [bookId]);
+
+  // Scroll to saved position when content is loaded and layout is ready (only once)
+  useEffect(() => {
+    if (
+      !hasScrolledToInitialPosition.current &&
+      lines.length > 0 &&
+      currentLineIndex > 0 &&
+      scrollViewHeight > 0 &&
+      contentHeight > 0
+    ) {
+      // Use requestAnimationFrame to ensure layout measurements are ready
+      requestAnimationFrame(() => {
+        const lineData = linePositionsRef.current[currentLineIndex];
+        const isLastLine = currentLineIndex === lines.length - 1;
+        
+        if (lineData) {
+          if (isLastLine) {
+            // For the last line, show it at the bottom
+            const lineBottom = lineData.y + lineData.height;
+            const maxScrollY = Math.max(0, contentHeight - scrollViewHeight);
+            const scrollY = Math.min(maxScrollY, Math.max(0, lineBottom - scrollViewHeight));
+            scrollViewRef.current?.scrollTo({
+              y: scrollY,
+              animated: false,
+            });
+          } else {
+            // For other lines, center them in the viewport
+            const centeredY = lineData.y + lineData.height / 2 - scrollViewHeight / 2;
+            scrollViewRef.current?.scrollTo({
+              y: Math.max(0, centeredY),
+              animated: false,
+            });
+          }
+          hasScrolledToInitialPosition.current = true;
+        } else {
+          // Fallback to calculated position if measurement not available yet
+          // Try again after a short delay to allow layout to complete
+          setTimeout(() => {
+            const lineData = linePositionsRef.current[currentLineIndex];
+            if (lineData) {
+              const isLastLine = currentLineIndex === lines.length - 1;
+              if (isLastLine) {
+                const lineBottom = lineData.y + lineData.height;
+                const maxScrollY = Math.max(0, contentHeight - scrollViewHeight);
+                const scrollY = Math.min(maxScrollY, Math.max(0, lineBottom - scrollViewHeight));
+                scrollViewRef.current?.scrollTo({
+                  y: scrollY,
+                  animated: false,
+                });
+              } else {
+                const centeredY = lineData.y + lineData.height / 2 - scrollViewHeight / 2;
+                scrollViewRef.current?.scrollTo({
+                  y: Math.max(0, centeredY),
+                  animated: false,
+                });
+              }
+              hasScrolledToInitialPosition.current = true;
+            } else {
+              // Final fallback to calculated position
+              const lineHeight = textSize * 1.5 + 8;
+              const lineY = 20 + currentLineIndex * lineHeight;
+              const isLastLine = currentLineIndex === lines.length - 1;
+              if (isLastLine) {
+                const lineBottom = lineY + lineHeight;
+                const maxScrollY = Math.max(0, contentHeight - scrollViewHeight);
+                const scrollY = Math.min(maxScrollY, Math.max(0, lineBottom - scrollViewHeight));
+                scrollViewRef.current?.scrollTo({
+                  y: scrollY,
+                  animated: false,
+                });
+              } else {
+                const centeredY = lineY + lineHeight / 2 - scrollViewHeight / 2;
+                scrollViewRef.current?.scrollTo({
+                  y: Math.max(0, centeredY),
+                  animated: false,
+                });
+              }
+              hasScrolledToInitialPosition.current = true;
+            }
+          }, 100);
+        }
+      });
+    }
+  }, [lines.length, currentLineIndex, scrollViewHeight, contentHeight, textSize]);
 
   const loadBook = async (): Promise<void> => {
     try {
@@ -82,6 +169,67 @@ export const BookReaderScreen = () => {
     }
   };
 
+  const handleLineClick = (lineIndex: number): void => {
+    // Pause if currently playing
+    if (isPlaying) {
+      speechService.pause();
+      setIsPlaying(false);
+    }
+
+    // Set the clicked line as current
+    setCurrentLineIndex(lineIndex);
+
+    // Save progress
+    if (book) {
+      void storageService.updateProgress(book.id, lineIndex);
+    }
+
+    // Scroll to center the clicked line
+    requestAnimationFrame(() => {
+      const lineData = linePositionsRef.current[lineIndex];
+      const isLastLine = lineIndex === lines.length - 1;
+
+      if (lineData && scrollViewHeight > 0) {
+        if (isLastLine) {
+          // For the last line, show it at the bottom
+          const lineBottom = lineData.y + lineData.height;
+          const maxScrollY = Math.max(0, contentHeight - scrollViewHeight);
+          const scrollY = Math.min(maxScrollY, Math.max(0, lineBottom - scrollViewHeight));
+          scrollViewRef.current?.scrollTo({
+            y: scrollY,
+            animated: true,
+          });
+        } else {
+          // For other lines, center them
+          const centeredY = lineData.y + lineData.height / 2 - scrollViewHeight / 2;
+          scrollViewRef.current?.scrollTo({
+            y: Math.max(0, centeredY),
+            animated: true,
+          });
+        }
+      } else {
+        // Fallback to calculated position
+        const lineHeight = textSize * 1.5 + 8;
+        const lineY = 20 + lineIndex * lineHeight;
+        if (isLastLine) {
+          const lineBottom = lineY + lineHeight;
+          const maxScrollY = Math.max(0, contentHeight - scrollViewHeight);
+          const scrollY = Math.min(maxScrollY, Math.max(0, lineBottom - scrollViewHeight));
+          scrollViewRef.current?.scrollTo({
+            y: scrollY,
+            animated: true,
+          });
+        } else {
+          const centeredY = lineY + lineHeight / 2 - scrollViewHeight / 2;
+          scrollViewRef.current?.scrollTo({
+            y: Math.max(0, centeredY),
+            animated: true,
+          });
+        }
+      }
+    });
+  };
+
   const handlePlayPause = async (): Promise<void> => {
     if (isPlaying) {
       // Pause
@@ -94,32 +242,107 @@ export const BookReaderScreen = () => {
       }
     } else {
       // Play from current position
+      if (lines.length === 0) {
+        Alert.alert("Error", "No content available to read");
+        return;
+      }
+      
+      // If we're at or past the last line, restart from the beginning
+      const startLine = currentLineIndex >= lines.length - 1 ? 0 : currentLineIndex;
+      if (startLine === 0 && currentLineIndex >= lines.length - 1) {
+        setCurrentLineIndex(0);
+        // Update saved progress to beginning
+        if (book) {
+          await storageService.updateProgress(book.id, 0);
+        }
+        // Scroll to the beginning
+        scrollViewRef.current?.scrollTo({
+          y: 0,
+          animated: true,
+        });
+      }
+      
       setIsPlaying(true);
 
-      await speechService.speak(lines, currentLineIndex, {
+      await speechService.speak(lines, startLine, {
         rate: book?.settings?.rate ?? 1.0,
         pitch: book?.settings?.pitch ?? 1.0,
         onLineComplete: (lineIndex: number) => {
-          setCurrentLineIndex(lineIndex);
+          // If reached the last line, stop playing and reset button to play
+          // Don't scroll anymore once finished
+          if (lineIndex >= lines.length) {
+            setIsPlaying(false);
+            speechService.stop(); // Ensure speech stops
+            // Set to last line but don't scroll
+            setCurrentLineIndex(lines.length - 1);
+            // Save final progress
+            if (book) {
+              void storageService.updateProgress(book.id, lines.length - 1);
+            }
+            return; // Exit early, don't scroll
+          }
 
-          // Scroll to center the current line
-          const lineHeight = textSize * 1.5 + 8; // fontSize * 1.5 + marginBottom
-          const lineY = 20 + lineIndex * lineHeight; // paddingTop + index * lineHeight
-          const centeredY = lineY + lineHeight / 2 - scrollViewHeight / 2;
-          scrollViewRef.current?.scrollTo({
-            y: Math.max(0, centeredY),
-            animated: false,
+          // Clamp lineIndex to valid range
+          const actualLineIndex = Math.min(lineIndex, lines.length - 1);
+          setCurrentLineIndex(actualLineIndex);
+
+          // Use requestAnimationFrame to ensure layout measurements are ready
+          requestAnimationFrame(() => {
+            const lineData = linePositionsRef.current[actualLineIndex];
+            const isLastLine = actualLineIndex === lines.length - 1;
+            
+            if (lineData && scrollViewHeight > 0) {
+              // onLayout gives us position relative to ScrollView content container
+              if (isLastLine) {
+                // For the last line, always ensure it's visible at the bottom of viewport
+                // Don't center it to avoid scrolling up unnecessarily
+                const lineBottom = lineData.y + lineData.height;
+                const maxScrollY = Math.max(0, contentHeight - scrollViewHeight);
+                
+                // Scroll to show the line at the bottom of viewport
+                // Position so the line's bottom is visible (align with viewport bottom)
+                const scrollY = Math.min(maxScrollY, Math.max(0, lineBottom - scrollViewHeight));
+                scrollViewRef.current?.scrollTo({
+                  y: scrollY,
+                  animated: false,
+                });
+              } else {
+                // For other lines, center them in the viewport
+                const centeredY = lineData.y + lineData.height / 2 - scrollViewHeight / 2;
+                scrollViewRef.current?.scrollTo({
+                  y: Math.max(0, centeredY),
+                  animated: false,
+                });
+              }
+            } else {
+              // Fallback to calculated position if measurement not available
+              const lineHeight = textSize * 1.5 + 8;
+              const actualLineIndex = Math.min(lineIndex, lines.length - 1);
+              const isLastLine = actualLineIndex === lines.length - 1;
+              const lineY = 20 + actualLineIndex * lineHeight;
+              
+              if (isLastLine) {
+                // For last line, always ensure it's visible at the bottom
+                const lineBottom = lineY + lineHeight;
+                const maxScrollY = Math.max(0, contentHeight - scrollViewHeight);
+                const scrollY = Math.min(maxScrollY, Math.max(0, lineBottom - scrollViewHeight));
+                scrollViewRef.current?.scrollTo({
+                  y: scrollY,
+                  animated: false,
+                });
+              } else {
+                const centeredY = lineY + lineHeight / 2 - scrollViewHeight / 2;
+                scrollViewRef.current?.scrollTo({
+                  y: Math.max(0, centeredY),
+                  animated: false,
+                });
+              }
+            }
           });
 
           // Auto-save progress periodically
           if (book && lineIndex % 10 === 0) {
             void storageService.updateProgress(book.id, lineIndex);
-          }
-
-          // If reached the last line, stop playing and reset button to play
-          if (lineIndex >= lines.length) {
-            setIsPlaying(false);
-            speechService.stop(); // Ensure speech stops
           }
         },
       });
@@ -163,18 +386,38 @@ export const BookReaderScreen = () => {
             const { height } = event.nativeEvent.layout;
             setScrollViewHeight(height);
           }}
+          onContentSizeChange={(_contentWidth, contentHeight) => {
+            setContentHeight(contentHeight);
+          }}
         >
           {lines.map((line, index) => (
-            <Text
+            <View
               key={index}
-              style={[
-                styles.bookText,
-                { fontSize: textSize },
-                index === currentLineIndex && styles.highlightedLine,
-              ]}
+              ref={(ref) => {
+                lineRefs.current[index] = ref;
+              }}
+              onLayout={(event) => {
+                const { y, height } = event.nativeEvent.layout;
+                // Store in ref for immediate synchronous access
+                linePositionsRef.current[index] = { y, height };
+              }}
+              collapsable={false}
             >
-              {line}
-            </Text>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => handleLineClick(index)}
+              >
+                <Text
+                  style={[
+                    styles.bookText,
+                    { fontSize: textSize },
+                    index === currentLineIndex && styles.highlightedLine,
+                  ]}
+                >
+                  {line}
+                </Text>
+              </TouchableOpacity>
+            </View>
           ))}
         </ScrollView>
       </TouchableWithoutFeedback>
