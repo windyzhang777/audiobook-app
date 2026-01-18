@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+.expo/
+.expo-shared/
+coverage/
+*.config.js
+babel.config.js
+metro.config.js
