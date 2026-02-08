@@ -1,4 +1,4 @@
-import { calculateProgress, type Book, type BookContent, type SpeechOptions, type TextOptions } from '@audiobook/shared';
+import { calculateProgress, FIVE_MINUTES, type Book, type BookContent, type SpeechOptions, type TextOptions } from '@audiobook/shared';
 import { ArrowLeft, LibraryBig, Loader, Minus, Pause, Play, Plus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -96,7 +96,7 @@ export const BookReader = () => {
     }
   };
 
-  const debounceUpdate = useDebounceCallback(handleBookUpdate);
+  const debounceUpdate = useDebounceCallback(handleBookUpdate, FIVE_MINUTES);
 
   // TODO: add cloud over native browser TTS
   const startUtterance = (startIndex: number) => {
@@ -154,13 +154,19 @@ export const BookReader = () => {
   }, [id]);
 
   useEffect(() => {
+    if (!loading && lines.length > 0 && lineRefs.current[currentLine]) {
+      const scrollTimeout = setTimeout(() => lineRefs.current[currentLine]?.scrollIntoView({ behavior: 'auto', block: 'center' }), 2000);
+      return () => clearTimeout(scrollTimeout);
+    }
+  }, [loading, lines.length]);
+
+  useEffect(() => {
     if (!loading && !isInitialLoad.current && updatedBook) {
       debounceUpdate(updatedBook);
     }
   }, [updatedBook, debounceUpdate, loading]);
 
   useEffect(() => {
-    console.log(`isNavigatingRef.current :`, isNavigatingRef.current);
     if (isNavigatingRef.current) return;
 
     if (isPlaying) {

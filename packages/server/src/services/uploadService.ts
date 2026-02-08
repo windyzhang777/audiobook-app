@@ -1,4 +1,5 @@
 import { uploadsDir } from '@/index';
+import { ONE_DAY, ONE_HOUR } from '@audiobook/shared';
 import { createWriteStream } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
@@ -15,9 +16,6 @@ interface UploadSession {
   createdAt: Date;
   lastActivity: Date;
 }
-
-const ONE_HOUR = 60 * 60 * 1000;
-const ONE_DAY = 24 * 60 * 60 * 1000;
 
 export class UploadService {
   private sessions = new Map<string, UploadSession>();
@@ -208,7 +206,7 @@ export class UploadService {
    */
   private cleanupStaleUploads = async (): Promise<void> => {
     const now = Date.now();
-    const staleThreshold = ONE_DAY; // 1 day
+    const staleThreshold = ONE_DAY; // 24 hours
 
     for (const [uploadId, session] of this.sessions.entries()) {
       const age = now - session.lastActivity.getTime();
