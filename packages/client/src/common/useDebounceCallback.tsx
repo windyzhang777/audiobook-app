@@ -10,19 +10,20 @@ export function useDebounceCallback<T extends (...args: any[]) => void>(callback
     callbackRef.current = callback;
   }, [callback]);
 
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current && argsRef.current) {
-        clearTimeout(timeoutRef.current);
+  const flush = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+      if (argsRef.current) {
         callbackRef.current(...argsRef.current);
+        argsRef.current = null;
       }
-    };
+    }
   }, []);
 
-  return useCallback(
+  const debouncedFn = useCallback(
     (...args: Parameters<T>) => {
       argsRef.current = args;
-
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       timeoutRef.current = setTimeout(() => {
         timeoutRef.current = null;
@@ -32,4 +33,6 @@ export function useDebounceCallback<T extends (...args: any[]) => void>(callback
     },
     [delay],
   );
+
+  return { run: debouncedFn, flush };
 }

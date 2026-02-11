@@ -1,5 +1,5 @@
 import { calculateProgress, FIVE_MINUTES, type Book, type BookContent, type SpeechOptions, type TextOptions } from '@audiobook/shared';
-import { ArrowLeft, LibraryBig, Loader, Minus, Pause, Play, Plus } from 'lucide-react';
+import { AArrowDown, AArrowUp, ArrowLeft, AudioLines, BookmarkPlus, LibraryBig, Loader, Pause, Play, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useDebounceCallback } from '../common/useDebounceCallback';
@@ -16,47 +16,45 @@ export const BookReader = () => {
   const [langCode, setLangCode] = useState('eng');
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isScrolling, setIsScrolling] = useState(false);
+  const [showJumpButton, setShowJumpButton] = useState(false);
   const [error, setError] = useState<string>();
   const [currentLine, setCurrentLine] = useState<Book['currentLine']>(0);
   const [fontSize, setFontSize] = useState<NonNullable<TextOptions['fontSize']>>(18);
   const [speechRate, setSpeechRate] = useState<NonNullable<SpeechOptions['rate']>>(1.0);
   const updatedBook = useMemo(() => ({ currentLine, settings: { ...(book?.settings || {}), fontSize, rate: speechRate } }), [book?.settings, currentLine, fontSize, speechRate]);
 
-  const isInitialLoad = useRef(true);
   const lineRefs = useRef<(HTMLLIElement | null)[]>([]);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const playButtonRef = useRef<HTMLButtonElement>(null);
-  const isNavigatingRef = useRef(false);
-  const navTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shouldSync = useRef(false);
 
   const loadBook = async (id: string) => {
-    try {
-      const book = await api.books.getById(id);
-      if (!book) return;
+    const book = await api.books.getById(id);
+    if (!book) return;
 
-      setBook(book);
-      setCurrentLine(book.currentLine || 0);
-      setFontSize(book.settings?.fontSize || 18);
-      setSpeechRate(book.settings?.rate || 1.0);
-      playButtonRef.current?.focus();
-    } catch (error) {
-      setError('Failed to load book');
-      console.error('Failed to load book: ', error);
-    } finally {
-      setLoading(false);
-    }
+    setBook(book);
+    setCurrentLine(book.currentLine || 0);
+    setFontSize(book.settings?.fontSize || 18);
+    setSpeechRate(book.settings?.rate || 1.0);
+    playButtonRef.current?.focus();
   };
 
   const loadBookContent = async (id: string) => {
-    try {
-      const content = await api.books.getContent(id);
-      if (!content) return;
+    const content = await api.books.getContent(id);
+    if (!content) return;
 
-      setLines(content.lines);
-      setLangCode(content.langCode);
+    setLines(content.lines);
+    setLangCode(content.langCode);
+  };
+
+  const loadData = async (id: string) => {
+    try {
+      await Promise.all([loadBook(id), loadBookContent(id)]);
     } catch (error) {
-      setError('Failed to load book content');
-      console.error('Failed to load book content: ', error);
+      setError('Failed to load book');
+      console.error('Failed to load book: ', error);
     } finally {
       setLoading(false);
     }
@@ -78,7 +76,7 @@ export const BookReader = () => {
   };
 
   const handleLineClick = (lineIndex: number) => {
-    isNavigatingRef.current = false;
+    setIsScrolling(false);
     setCurrentLine(lineIndex);
     if (isPlaying) {
       stopUtterance();
@@ -96,7 +94,7 @@ export const BookReader = () => {
     }
   };
 
-  const debounceUpdate = useDebounceCallback(handleBookUpdate, FIVE_MINUTES);
+  const { run: debounceUpdate, flush: flushUpdate } = useDebounceCallback(handleBookUpdate, FIVE_MINUTES);
 
   // TODO: add cloud over native browser TTS
   const startUtterance = (startIndex: number) => {
@@ -141,39 +139,71 @@ export const BookReader = () => {
   const toggleSpeechRate = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const rate = parseFloat(e.target.value);
     setSpeechRate(rate);
+    if (isPlaying) stopUtterance();
+    playButtonRef.current?.focus();
   };
 
   useEffect(() => {
-    if (id) {
-      loadBook(id).then(() => setTimeout(() => (isInitialLoad.current = false), 100));
-      loadBookContent(id);
-    }
+    if (!id) return;
+
+    loadData(id);
+
+    const handlePageVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        if (shouldSync.current) return;
+
+        shouldSync.current = true;
+        flushUpdate();
+      } else {
+        shouldSync.current = false;
+      }
+    };
+
+    document.addEventListener('visibilitychange', handlePageVisibility);
+    window.addEventListener('pagehide', handlePageVisibility);
+
     return () => {
       stopUtterance();
+
+      document.removeEventListener('visibilitychange', handlePageVisibility);
+      window.removeEventListener('pagehide', handlePageVisibility);
     };
   }, [id]);
 
   useEffect(() => {
-    if (!loading && lines.length > 0 && lineRefs.current[currentLine]) {
-      const scrollTimeout = setTimeout(() => lineRefs.current[currentLine]?.scrollIntoView({ behavior: 'auto', block: 'center' }), 2000);
-      return () => clearTimeout(scrollTimeout);
-    }
-  }, [loading, lines.length]);
+    const hasUpdated = JSON.stringify(updatedBook) !== JSON.stringify({ currentLine: book?.currentLine, settings: book?.settings });
 
-  useEffect(() => {
-    if (!loading && !isInitialLoad.current && updatedBook) {
+    if (!loading && book && updatedBook && hasUpdated) {
       debounceUpdate(updatedBook);
     }
-  }, [updatedBook, debounceUpdate, loading]);
+  }, [debounceUpdate, loading, book, updatedBook]);
 
   useEffect(() => {
-    if (isNavigatingRef.current) return;
+    return () => flushUpdate();
+  }, [flushUpdate]);
 
-    if (isPlaying) {
-      lineRefs.current[currentLine]?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-      lineRefs.current[currentLine]?.focus({ preventScroll: true });
-    }
-  }, [isPlaying, currentLine]);
+  useEffect(() => {
+    if (isScrolling || !isPlaying) return;
+
+    lineRefs.current[currentLine]?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    lineRefs.current[currentLine]?.focus({ preventScroll: true });
+  }, [isScrolling, isPlaying, currentLine]);
+
+  useEffect(() => {
+    const target = lineRefs.current[currentLine];
+    if (!target || loading) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setShowJumpButton(!entry.isIntersecting);
+      },
+      { root: null, threshold: 0.5 },
+    );
+
+    observer.observe(target);
+
+    return () => observer.disconnect();
+  }, [currentLine, loading]);
 
   if (loading) {
     return (
@@ -194,7 +224,18 @@ export const BookReader = () => {
 
   return (
     <div className="min-h-full relative">
-      <section className="min-h-[90vh] h-[50vh] max-h-3/4 overflow-auto px-4 py-6 leading-loose">
+      <section
+        onScroll={() => {
+          setIsScrolling(true);
+
+          if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+
+          scrollTimeoutRef.current = setTimeout(() => {
+            setIsScrolling(false);
+          }, 2000);
+        }}
+        className="min-h-[90vh] h-[50vh] max-h-3/4 overflow-auto px-12 pt-6 leading-loose"
+      >
         <header className="relative text-center mb-4">
           <button className="absolute top-2 left-0 p-0!" onClick={() => navigate('/')} title="Back to Books">
             <ArrowLeft size={16} />
@@ -203,14 +244,23 @@ export const BookReader = () => {
           <h3 className="font-semibold">{book.title}</h3>
         </header>
 
+        {showJumpButton ? (
+          <button
+            onClick={() => {
+              setIsScrolling(false);
+              lineRefs.current[currentLine]?.scrollIntoView({ behavior: 'auto', block: 'center' });
+              playButtonRef.current?.focus();
+            }}
+            className="fixed top-4 right-2"
+            title="Jump to last read"
+          >
+            <BookmarkPlus fill="orange" strokeWidth={1.2} />
+          </button>
+        ) : (
+          <></>
+        )}
+
         <ol
-          onWheel={() => {
-            isNavigatingRef.current = true;
-            if (navTimeoutRef.current) clearTimeout(navTimeoutRef.current);
-            navTimeoutRef.current = setTimeout(() => {
-              isNavigatingRef.current = false;
-            }, 2000);
-          }}
           onKeyDown={(e) => {
             let nextLine = currentLine;
             if (e.key === 'ArrowDown') {
@@ -241,7 +291,8 @@ export const BookReader = () => {
               key={`line-${index}`}
               role="button"
               tabIndex={index === currentLine ? 0 : -1}
-              aria-current={index === currentLine ? 'step' : undefined}
+              aria-current={index === currentLine ? 'location' : undefined}
+              aria-label={`Line ${index}`}
               ref={(el) => {
                 lineRefs.current[index] = el;
               }}
@@ -255,36 +306,47 @@ export const BookReader = () => {
       </section>
 
       {/* Controller Panel */}
-      <div className="fixed bottom-0 left-0 h-[10vh] w-full bg-gray-50 flex justify-between items-center p-8 text-sm">
+      <div className="fixed bottom-0 left-0 h-[10vh] w-full bg-gray-50 flex justify-between items-center p-8 text-sm [&>*]:px-2 [&>*]:py-4 [&>*]:h-12 [&>*:hover]:bg-gray-100 [&>*:hover]:rounded-lg">
         <button className="text-sm" onClick={() => navigate('/')} title="Back to Books">
           <LibraryBig size={16} />
         </button>
 
         {isPlaying ? (
-          <button ref={playButtonRef} onClick={handlePlayPause} className="w-32!">
+          <button ref={playButtonRef} onClick={handlePlayPause} title="Pause">
             <Pause className="w-7 h-7 p-1.5 rounded-full bg-gray-600 text-white hover:bg-gray-700 active:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50" />
-            Pause
           </button>
         ) : (
-          <button ref={playButtonRef} onClick={handlePlayPause} className="w-32!">
+          <button ref={playButtonRef} onClick={handlePlayPause} title="Play">
             <Play className="w-7 h-7 p-1.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50" />
-            Play
           </button>
         )}
 
-        <span className="flex items-center gap-1">
-          <button onClick={() => toggleFontSize(fontSize + 1)}>
-            <Plus className="w-7 h-7 p-1.5 rounded-full bg-gray-400 text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50" />
+        <span className="flex items-center gap-1" title="Select Voice">
+          <UsersRound size={16} />
+          <select onChange={toggleSpeechRate} value={speechRate} className="cursor-pointer text-center">
+            {['system'].map((voice) => (
+              <option key={`voice-${voice}`} value={voice}>
+                {voice}
+              </option>
+            ))}
+          </select>
+        </span>
+
+        <span className="flex items-center" title="Text Size">
+          <button onClick={() => toggleFontSize(fontSize + 1)} title="Text Size Up">
+            <AArrowUp className="w-7 h-7 p-1.5 rounded-full bg-gray-400 text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50" />
           </button>
-          <p>Font Size {fontSize}</p>
-          <button onClick={() => toggleFontSize(fontSize - 1)}>
-            <Minus className="w-7 h-7 p-1.5 rounded-full bg-gray-400 text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50" />
+          <p>{fontSize}</p>
+          <button onClick={() => toggleFontSize(fontSize - 1)} title="Text Size Down">
+            <AArrowDown className="w-7 h-7 p-1.5 rounded-full bg-gray-400 text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50" />
           </button>
         </span>
 
-        <span className="flex items-center gap-1 w-20">
-          <label>Speed:</label>
-          <select onChange={toggleSpeechRate} value={speechRate} className="cursor-pointer">
+        <span className="flex items-center gap-1" title="Speech Rate">
+          <label>
+            <AudioLines size={16} />
+          </label>
+          <select onChange={toggleSpeechRate} value={speechRate} className="cursor-pointer text-center">
             {SPEECH_RATE_OPTIONS.map((rate) => (
               <option key={`rate-${rate}`} value={rate}>
                 {rate}x
@@ -293,7 +355,9 @@ export const BookReader = () => {
           </select>
         </span>
 
-        <span>Progress: {calculateProgress(book.currentLine, book.totalLines)}%</span>
+        <span title={`Line ${currentLine} of ${lines.length}`} className="bg-transparent!">
+          Progress: {calculateProgress(book.currentLine, book.totalLines)}%
+        </span>
       </div>
     </div>
   );

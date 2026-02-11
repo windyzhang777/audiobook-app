@@ -54,20 +54,24 @@ export const api = {
     },
 
     update: async (id: string, updates: Partial<Book>): Promise<Book> => {
-      const response = await fetch(`/api/books/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ ...updates }),
-        keepalive: true,
-      });
+      try {
+        const response = await fetch(`/api/books/${id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ ...updates }),
+          keepalive: true,
+        });
 
-      if (!response.ok) {
-        const json = await response.json();
-        throw new Error(json.message);
+        if (!response.ok) {
+          const json = await response.json();
+          throw new Error(json.message);
+        }
+        return response.json();
+      } catch {
+        throw new Error('api to update book failed');
       }
-      return response.json();
     },
 
     delete: async (id: string) => {
@@ -76,6 +80,7 @@ export const api = {
       });
     },
   },
+
   upload: {
     /**
      * Upload book with chunked upload (recommended for files > 1MB)

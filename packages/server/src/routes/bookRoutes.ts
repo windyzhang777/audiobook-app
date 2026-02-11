@@ -44,7 +44,7 @@ export const bookRoutes = (bookController: BookController) => {
 
   router.get('/', bookController.getAll);
   router.get('/:id', bookController.getById);
-  router.put('/:id', bookController.update);
+  router.patch('/:id', bookController.update);
   router.get('/:id/content', bookController.getContent);
   router.post('/upload', upload.single('file'), bookController.upload);
   router.delete('/:id', bookController.delete);
