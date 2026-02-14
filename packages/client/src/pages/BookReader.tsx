@@ -45,7 +45,6 @@ export const BookReader = () => {
     setCurrentLine(book.currentLine || 0);
     setFontSize(book.settings?.fontSize || 18);
     setSpeechRate(book.settings?.rate || 1.0);
-    playButtonRef.current?.focus();
   };
 
   const loadBookContent = async (id: string) => {
@@ -54,17 +53,6 @@ export const BookReader = () => {
 
     setLines(content.lines);
     setLangCode(content.langCode);
-  };
-
-  const loadData = async (id: string) => {
-    try {
-      await Promise.all([loadBook(id), loadBookContent(id)]);
-    } catch (error) {
-      setError('Failed to load book');
-      console.error('Failed to load book: ', error);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handlePlayPause = () => {
@@ -170,16 +158,31 @@ export const BookReader = () => {
   useEffect(() => {
     if (!id) return;
 
-    loadData(id);
+    const loadData = async (id: string) => {
+      try {
+        await Promise.all([loadBook(id), loadBookContent(id)]);
+      } catch (error) {
+        setError('Failed to load book');
+        console.error('Failed to load book: ', error);
+      } finally {
+        setLoading(false);
+        playButtonRef.current?.focus();
+      }
+    };
 
+    loadData(id);
+  }, [id]);
+
+  useEffect(() => {
     const handlePageVisibility = () => {
       if (document.visibilityState === 'hidden') {
         if (shouldSync.current) return;
 
         shouldSync.current = true;
         flushUpdate();
-      } else {
+      } else if (document.visibilityState === 'visible') {
         shouldSync.current = false;
+        playButtonRef.current?.focus();
       }
     };
 
