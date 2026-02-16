@@ -1,14 +1,18 @@
 import { bookRoutes } from '@/routes/bookRoutes';
 import { uploadRoutes } from '@/routes/uploadRoutes';
 import cors from 'cors';
+import dotenv from 'dotenv';
 import express, { NextFunction, Request, Response } from 'express';
 import path from 'path';
 import { BookController } from './controllers/bookController';
 import { UploadController } from './controllers/uploadController';
 import { BookRepository } from './repositories/book';
+import { AudiobookService } from './services/AudiobookService';
 import { BookService } from './services/bookService';
 import { TextProcessorService } from './services/textProcessorService';
+import { TTSGoogle } from './services/TTSService';
 import { UploadService } from './services/uploadService';
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -25,8 +29,10 @@ app.use(uploadsDir, express.static(uploadsDir));
 // Instances
 const bookRepository = new BookRepository();
 const textProcessorService = new TextProcessorService();
+const ttsService = new TTSGoogle();
+const audiobookService = new AudiobookService(bookRepository, ttsService);
 const bookService = new BookService(bookRepository, textProcessorService);
-const bookController = new BookController(bookService);
+const bookController = new BookController(bookService, audiobookService);
 const uploadService = new UploadService();
 const uploadController = new UploadController(uploadService, bookService);
 

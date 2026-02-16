@@ -84,7 +84,6 @@ npm run type-check
 
 - Play/pause functionality
 - Adjustable reading speed (0.5x - 4.0x)
-- Volume control
 - Navigate between sentences
 - Double click any sentence to jump to it
 - Automatic progress saving

@@ -1,10 +1,14 @@
+import { AudiobookService } from '@/services/AudiobookService';
 import { BookService } from '@/services/bookService';
 import { fixEncoding } from '@audiobook/shared';
 import { Request, Response } from 'express';
 import path from 'path';
 
 export class BookController {
-  constructor(private bookService: BookService) {}
+  constructor(
+    private bookService: BookService,
+    private audiobookService: AudiobookService,
+  ) {}
 
   /**
    * Legacy upload (simple, for small files < 1MB)
@@ -25,6 +29,7 @@ export class BookController {
 
       this.bookService.checkExisting(cleanTitle, req.file.path);
       const book = await this.bookService.upload(req.file.path, fileType, cleanTitle);
+
       res.status(201).json(book);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error adding book';
@@ -43,6 +48,25 @@ export class BookController {
       return res.status(404).json({ message: 'Book not found' });
     }
     res.json(book);
+  };
+
+  getAudioForLine = async (req: Request, res: Response) => {
+    const { id, lineIndex } = req.params;
+
+    try {
+      const buffer = await this.audiobookService.getAudioForLine(id as string, parseInt(lineIndex as string));
+
+      // Set headers for MP3 audio
+      res.set({
+        'Content-Type': 'audio/mpeg',
+        'Content-Length': buffer.length,
+        'Accept-Ranges': 'bytes',
+      });
+
+      res.send(buffer);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to generate audio' });
+    }
   };
 
   getContent = (req: Request, res: Response) => {

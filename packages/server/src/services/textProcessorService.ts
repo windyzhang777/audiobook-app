@@ -8,18 +8,19 @@ export class TextProcessorService {
 
   detectLanguage = (text: string): string => {
     const langCode = franc(text, { minLength: 100 });
-    return localeByLang[langCode] || 'en-US'; // default to English
+    return localeByLang[langCode] || localeByLang.default; // default to English
   };
 
-  splitTextIntoLines = async (text: string, locale = 'en-US'): Promise<string[]> => {
+  splitTextIntoLines = async (text: string, langCode: string = localeByLang.default): Promise<string[]> => {
     try {
-      const segmenter = new Intl.Segmenter(locale, { granularity: 'sentence' });
+      const segmenter = new Intl.Segmenter(langCode, { granularity: 'sentence' });
       const segments: string[] = [];
 
       const iterator = segmenter.segment(text);
       for (const { segment } of iterator) {
         if (!segment) continue;
 
+        // Further split by newlines to respect paragraph breaks
         const subLines = segment.split('\n');
         for (const line of subLines) {
           const trimmed = line.trim();
@@ -62,14 +63,13 @@ export class TextProcessorService {
         for (const chapter of epub.flow) {
           const html = await epub.getChapterRawAsync(chapter.id);
 
+          // Strip HTML and clean whitespace
           const rawText = html
             .replace(/<[^>]*>/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
 
-          if (rawText) {
-            textContent.push(rawText);
-          }
+          if (rawText) textContent.push(rawText);
 
           await this.yield();
         }

@@ -1,13 +1,5 @@
 import { BookFileType } from '@/types';
 
-// Convert franc langCode 3-letter (ISO 639-3) to 2-letter (BCP 47) + region
-export const localeByLang: Record<string, string> = {
-  cmn: 'zh-CN', // Mandarin -> Chinese (Simplified)
-  eng: 'en-US', // English -> English (US)
-  fra: 'fr-FR', // French -> French (France)
-  und: 'en-US', // Undetermined -> Default
-};
-
 // \p{L} matches any letter from any language
 // \p{N} matches any kind of numeric character
 export const hasAlphanumeric = /[\p{L}\p{N}]/u;

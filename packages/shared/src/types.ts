@@ -6,7 +6,7 @@ export interface SpeechOptions {
   rate?: number;
   pitch?: number;
   volume?: number;
-  voice?: unknown;
+  voice?: string;
 }
 
 export interface TextOptions {
@@ -34,6 +34,7 @@ export interface Book {
 
   // setting for TTS per book
   settings?: SpeechOptions & TextOptions;
+  audioPath?: string;
 }
 
 export interface BookContent {

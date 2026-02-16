@@ -133,23 +133,33 @@ export class UploadService {
   private mergeChunks = async (session: UploadSession, outputPath: string): Promise<void> => {
     const writeStream = createWriteStream(outputPath);
 
-    for (let i = 0; i < session.totalChunks; i++) {
-      const chunkPath = path.join(session.tempDir, `chunk-${String(i).padStart(5, '0')}`);
+    try {
+      for (let i = 0; i < session.totalChunks; i++) {
+        const chunkPath = path.join(session.tempDir, `chunk-${String(i).padStart(5, '0')}`);
 
-      try {
         const chunkData = await fs.readFile(chunkPath);
-        writeStream.write(chunkData);
-      } catch (error) {
-        writeStream.close();
-        throw new Error(`Failed to read chunk ${i}: ${(error as Error).message}`);
-      }
-    }
+        await new Promise<void>((resolve, reject) => {
+          const canContinue = writeStream.write(chunkData);
 
-    // Wait for write to complete
-    await new Promise<void>((resolve, reject) => {
-      writeStream.end(() => resolve());
-      writeStream.on('error', reject);
-    });
+          if (canContinue) resolve();
+          else writeStream.once('drain', resolve); // Wait for 'drain' before reading next chunk
+          writeStream.once('error', reject); // Catch stream-specific errors (e.g. Disk Full)
+        });
+
+        // Yield to event loop every few chunks
+        if (i % 50 === 0) await new Promise(setImmediate);
+      }
+
+      // Wait for write to complete
+      await new Promise<void>((resolve, reject) => {
+        writeStream.end();
+        writeStream.on('finish', resolve);
+        writeStream.on('error', reject);
+      });
+    } catch (error) {
+      writeStream.destroy();
+      throw error;
+    }
   };
 
   /**

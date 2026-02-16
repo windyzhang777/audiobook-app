@@ -1,11 +1,16 @@
 import { useDebounceCallback } from '@/common/useDebounceCallback';
 import { api } from '@/services/api';
+import { ttsNative } from '@/services/TTSNative';
 import { calculateProgress, FIVE_MINUTES, type Book, type BookContent, type SpeechOptions, type TextOptions } from '@audiobook/shared';
 import { AArrowDown, AArrowUp, ArrowLeft, AudioLines, LibraryBig, Loader, Pause, Play, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 const SPEECH_RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
+const VOICE_MODES = [
+  { id: 'google', label: 'Google AI (Neural2)' },
+  { id: 'system', label: 'System (Browser)' },
+];
 
 export const BookReader = () => {
   const navigate = useNavigate();
@@ -17,22 +22,26 @@ export const BookReader = () => {
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState<string>();
+  const [showRateIndicator, setShowRateIndicator] = useState(false);
   const [currentLine, setCurrentLine] = useState<Book['currentLine']>(0);
   const [fontSize, setFontSize] = useState<NonNullable<TextOptions['fontSize']>>(18);
   const [speechRate, setSpeechRate] = useState<NonNullable<SpeechOptions['rate']>>(1.0);
+  const [voice, setVoice] = useState<NonNullable<SpeechOptions['voice']>>('system');
   const updatedBook = useMemo(
     () => ({
       currentLine,
-      settings: { ...(book?.settings || {}), fontSize, rate: speechRate },
+      settings: { ...(book?.settings || {}), fontSize, rate: speechRate, voice },
     }),
-    [book?.settings, currentLine, fontSize, speechRate],
+    [book?.settings, currentLine, fontSize, speechRate, voice],
   );
 
   const lineRefs = useRef<(HTMLLIElement | null)[]>([]);
   const silentAudioRef = useRef(new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'));
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const cloudAudioRef = useRef<HTMLAudioElement | null>(null);
   const playButtonRef = useRef<HTMLButtonElement>(null);
-  const isUserScrollRef = useRef(false);
+  const speechRateRef = useRef(speechRate);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const isUserScrollRef = useRef(true);
   const shouldSync = useRef(false);
 
   const loadBook = async (id: string) => {
@@ -43,6 +52,7 @@ export const BookReader = () => {
     setCurrentLine(book.currentLine || 0);
     setFontSize(book.settings?.fontSize || 18);
     setSpeechRate(book.settings?.rate || 1.0);
+    setVoice(book.settings?.voice || 'system');
   };
 
   const loadBookContent = async (id: string) => {
@@ -55,15 +65,15 @@ export const BookReader = () => {
 
   const handlePlayPause = () => {
     if (isPlaying) {
-      stopUtterance();
+      stopSpeech();
     } else {
       setIsPlaying(true);
       // if at the end, reset to start from the first line
       if (currentLine >= lines.length) {
         setCurrentLine(0);
-        startUtterance(0);
+        startSpeech(0);
       } else {
-        startUtterance(currentLine);
+        startSpeech(currentLine);
       }
     }
   };
@@ -71,8 +81,11 @@ export const BookReader = () => {
   const handleLineClick = (lineIndex: number) => {
     setCurrentLine(lineIndex);
     if (isPlaying) {
-      stopUtterance();
+      stopSpeech();
     }
+    setTimeout(() => {
+      isUserScrollRef.current = false;
+    }, 100);
   };
 
   const handleBookUpdate = async (updatedBook: Partial<Book>) => {
@@ -88,68 +101,90 @@ export const BookReader = () => {
 
   const { run: debounceUpdate, flush: flushUpdate } = useDebounceCallback(handleBookUpdate, FIVE_MINUTES);
 
-  // TODO: add cloud over native browser TTS
-  const startUtterance = (startIndex: number) => {
+  const startSpeech = (index: number) => {
     // Kick off the silent audio loop to "claim" the hardware buttons
     const audio = silentAudioRef.current;
     audio.loop = true;
     audio.play().catch((e) => console.error('Audio play failed:', e));
 
     // Explicitly set the Playback State (Crucial for iOS)
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = 'playing';
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+
+    if (voice === 'google') {
+      ttsNative.stop();
+      startCloudSpeech(index);
     }
 
-    speechSynthesis.cancel(); // cancel any ongoing speech
+    if (voice === 'system') {
+      if (cloudAudioRef.current) cloudAudioRef.current.pause();
+      startSystemSpeech(index);
+    }
+  };
 
-    // speak all lines from startIndex to end
+  const startCloudSpeech = (startIndex: number) => {
     let current = startIndex;
-    const speakNext = () => {
-      if (current >= lines.length) {
-        setIsPlaying(false);
-        playButtonRef.current?.focus();
-        return;
-      }
-      const utterance = new SpeechSynthesisUtterance(lines[current]);
-      utterance.lang = langCode;
-      utterance.rate = speechRate;
-      utterance.onend = () => {
-        current++;
-        setCurrentLine(current);
-        speakNext();
-      };
-      utterance.onerror = () => {
-        setIsPlaying(false);
-      };
-      utteranceRef.current = utterance;
-      speechSynthesis.speak(utterance);
+    if (current >= lines.length) {
+      setIsPlaying(false);
+      playButtonRef.current?.focus();
+      return;
+    }
+
+    if (!cloudAudioRef.current) {
+      cloudAudioRef.current = new Audio();
+      cloudAudioRef.current.onerror = () => setIsPlaying(false);
+    }
+
+    // Set source to server route
+    // The speechRate is applied directly to the audio element
+    cloudAudioRef.current.src = `/api/books/${id}/audio/${startIndex}`;
+    cloudAudioRef.current.playbackRate = speechRateRef.current;
+
+    cloudAudioRef.current.onended = () => {
+      current++;
+      setCurrentLine(current);
+      startCloudSpeech(current);
     };
 
-    speakNext();
+    cloudAudioRef.current.play().catch((e) => console.error('Playback failed:', e));
   };
 
-  const stopUtterance = () => {
-    if (silentAudioRef.current) {
-      silentAudioRef.current.pause();
-    }
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = 'paused';
+  const startSystemSpeech = (startIndex: number) => {
+    let current = startIndex;
+    if (current >= lines.length) {
+      setIsPlaying(false);
+      playButtonRef.current?.focus();
+      return;
     }
 
-    if (utteranceRef.current) utteranceRef.current.onend = null;
-    speechSynthesis.cancel();
+    ttsNative.speak(
+      lines[current],
+      { lang: langCode, rate: speechRateRef.current },
+      () => {
+        current++;
+        setCurrentLine(current);
+        startSystemSpeech(current);
+      },
+      () => setIsPlaying(false),
+    );
+  };
+
+  const stopSpeech = () => {
+    if (silentAudioRef.current) silentAudioRef.current.pause();
+
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+
+    // Cloud cleanup
+    if (cloudAudioRef.current) {
+      cloudAudioRef.current.pause();
+      cloudAudioRef.current.onended = null;
+      cloudAudioRef.current.src = '';
+      cloudAudioRef.current = null;
+    }
+
+    // System cleanup
+    ttsNative.stop();
+
     setIsPlaying(false);
-  };
-
-  const toggleFontSize = (fontSize: number) => {
-    setFontSize(fontSize);
-  };
-
-  const toggleSpeechRate = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const rate = parseFloat(e.target.value);
-    setSpeechRate(rate);
-    if (isPlaying) stopUtterance();
-    playButtonRef.current?.focus();
   };
 
   useEffect(() => {
@@ -163,7 +198,9 @@ export const BookReader = () => {
         console.error('Failed to load book: ', error);
       } finally {
         setLoading(false);
-        playButtonRef.current?.focus();
+        setTimeout(() => {
+          playButtonRef.current?.focus();
+        }, 100);
       }
     };
 
@@ -179,7 +216,9 @@ export const BookReader = () => {
         flushUpdate();
       } else if (document.visibilityState === 'visible') {
         shouldSync.current = false;
-        playButtonRef.current?.focus();
+        setTimeout(() => {
+          playButtonRef.current?.focus();
+        }, 100);
       }
     };
 
@@ -187,7 +226,8 @@ export const BookReader = () => {
     window.addEventListener('pagehide', handlePageVisibility);
 
     return () => {
-      stopUtterance();
+      stopSpeech();
+      ttsNative.stop();
 
       document.removeEventListener('visibilitychange', handlePageVisibility);
       window.removeEventListener('pagehide', handlePageVisibility);
@@ -336,7 +376,6 @@ export const BookReader = () => {
             lineRefs.current[currentLine]?.scrollIntoView({ behavior: 'auto', block: 'center' });
             setTimeout(() => {
               isUserScrollRef.current = false;
-              playButtonRef.current?.focus();
             }, 100);
           }}
           title="Jump to read"
@@ -346,6 +385,14 @@ export const BookReader = () => {
             transform: 'translateY(-50%)',
           }}
         />
+      </div>
+
+      {/* Rate Indicator */}
+      <div
+        className={`fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-4 justify-center items-center rounded-2xl p-6 z-10 pointer-events-none bg-amber-400/80 backdrop-blur-mg shadow-lg transition-all duration-300 ease-out ${showRateIndicator ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}
+      >
+        <AudioLines size={24} />
+        <span className="font-semibold text-xl">{speechRate}x</span>
       </div>
 
       {/* Controller Panel */}
@@ -366,21 +413,29 @@ export const BookReader = () => {
 
         <span className="flex items-center gap-1" title="Select Voice">
           <UsersRound size={16} />
-          <select onChange={toggleSpeechRate} value={speechRate} className="cursor-pointer text-center">
-            {['system'].map((voice) => (
-              <option key={`voice-${voice}`} value={voice}>
-                {voice}
+          <select
+            value={voice}
+            onChange={(e) => {
+              setVoice(e.target.value);
+              stopSpeech();
+              playButtonRef.current?.focus();
+            }}
+            className="cursor-pointer text-center bg-transparent focus:outline-none"
+          >
+            {VOICE_MODES.map((voice) => (
+              <option key={`voice-${voice.id}`} value={voice.id}>
+                {voice.label}
               </option>
             ))}
           </select>
         </span>
 
         <span className="flex items-center" title="Text Size">
-          <button onClick={() => toggleFontSize(fontSize + 1)} title="Text Size Up">
+          <button onClick={() => setFontSize(fontSize + 1)} title="Text Size Up">
             <AArrowUp className="w-7 h-7 p-1.5 rounded-full bg-gray-400 text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50" />
           </button>
           <p>{fontSize}</p>
-          <button onClick={() => toggleFontSize(fontSize - 1)} title="Text Size Down">
+          <button onClick={() => setFontSize(fontSize - 1)} title="Text Size Down">
             <AArrowDown className="w-7 h-7 p-1.5 rounded-full bg-gray-400 text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50" />
           </button>
         </span>
@@ -389,7 +444,27 @@ export const BookReader = () => {
           <label>
             <AudioLines size={16} />
           </label>
-          <select onChange={toggleSpeechRate} value={speechRate} className="cursor-pointer text-center">
+          <select
+            onChange={(e) => {
+              const newRate = parseFloat(e.target.value);
+              setSpeechRate(newRate);
+              speechRateRef.current = newRate;
+              if (timerRef.current) clearTimeout(timerRef.current);
+              setShowRateIndicator(true);
+              timerRef.current = setTimeout(() => {
+                setShowRateIndicator(false);
+              }, 1200);
+              if (isPlaying) {
+                stopSpeech();
+                setTimeout(() => {
+                  setIsPlaying(true);
+                  startSpeech(currentLine);
+                }, 100);
+              }
+            }}
+            value={speechRate}
+            className="cursor-pointer text-center bg-transparent focus:outline-none"
+          >
             {SPEECH_RATE_OPTIONS.map((rate) => (
               <option key={`rate-${rate}`} value={rate}>
                 {rate}x

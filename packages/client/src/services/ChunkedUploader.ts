@@ -1,4 +1,4 @@
-import type { Book } from '@audiobook/shared';
+import { sleep, type Book } from '@audiobook/shared';
 
 export interface UploadProgress {
   uploadedBytes: number;
@@ -171,7 +171,7 @@ export class ChunkedUploader {
 
         // Exponential backoff
         const delay = Math.min(1000 * Math.pow(2, chunk.retries - 1), 10000);
-        await this.sleep(delay);
+        await sleep(delay);
       }
     }
   };
@@ -295,33 +295,5 @@ export class ChunkedUploader {
     };
 
     this.config.onProgress(progress);
-  };
-
-  /**
-   * Helper: sleep function for retry delays
-   */
-  private sleep = (ms: number): Promise<void> => {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  };
-
-  /**
-   * Format bytes to human readable
-   */
-  static formatBytes = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
-  };
-
-  /**
-   * Format time to human readable
-   */
-  static formatTime = (seconds: number): string => {
-    if (seconds < 60) return `${Math.round(seconds)}s`;
-    const minutes = Math.floor(seconds / 60);
-    const secs = Math.round(seconds % 60);
-    return `${minutes}m ${secs}s`;
   };
 }

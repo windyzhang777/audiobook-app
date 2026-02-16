@@ -39,6 +39,6 @@ yarn-error.*
 /android
 
 # local
-compare1.json
-compare2.json
+.env
+*.json
 packages/server/uploads

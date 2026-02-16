@@ -40,6 +40,7 @@ export class BookService {
     }
 
     const { langCode, lines } = await this.textProcessorService.processBookText(textContent);
+
     const now = new Date().toISOString();
     const book: Book = {
       id: uuidv4(),
