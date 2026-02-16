@@ -38,7 +38,7 @@ export const calculateProgress = (currentLine: number, totalLines: number): numb
   return Math.round((currentLine / totalLines) * 100);
 };
 
-export const formatDate = (date: Date): string => {
+export const formatLocaleDateString = (date: Date): string => {
   return new Intl.DateTimeFormat('en-US', {
     year: 'numeric',
     month: 'short',
@@ -46,9 +46,37 @@ export const formatDate = (date: Date): string => {
   }).format(date);
 };
 
-export const formatTime = (date: Date): string => {
+export const formatLocaleTimeString = (date: Date): string => {
   return new Intl.DateTimeFormat('en-US', {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+};
+
+/**
+ * Format bytes to human readable
+ */
+export const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+};
+
+/**
+ * Helper: sleep function for retry delays
+ */
+export const sleep = (ms: number): Promise<void> => {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+};
+
+/**
+ * Format time to human readable
+ */
+export const formatTime = (seconds: number): string => {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const secs = Math.round(seconds % 60);
+  return `${minutes}m ${secs}s`;
 };

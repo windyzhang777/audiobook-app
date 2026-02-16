@@ -53,14 +53,6 @@ Object.defineProperty(navigator, 'mediaSession', {
   writable: true,
 });
 
-// Mock IntersectionObserver
-global.IntersectionObserver = vi.fn().mockImplementation(function () {
-  return {
-    observe: vi.fn(),
-    disconnect: vi.fn(),
-  };
-});
-
 vi.mock('@/services/api', () => ({
   api: {
     books: {

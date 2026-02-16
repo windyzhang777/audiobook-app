@@ -1,7 +1,7 @@
 import { useDebounceCallback } from '@/common/useDebounceCallback';
 import { api } from '@/services/api';
 import { calculateProgress, FIVE_MINUTES, type Book, type BookContent, type SpeechOptions, type TextOptions } from '@audiobook/shared';
-import { AArrowDown, AArrowUp, ArrowLeft, AudioLines, BookmarkPlus, LibraryBig, Loader, Pause, Play, UsersRound } from 'lucide-react';
+import { AArrowDown, AArrowUp, ArrowLeft, AudioLines, LibraryBig, Loader, Pause, Play, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -16,8 +16,6 @@ export const BookReader = () => {
   const [langCode, setLangCode] = useState('eng');
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isScrolling, setIsScrolling] = useState(false);
-  const [showJumpButton, setShowJumpButton] = useState(false);
   const [error, setError] = useState<string>();
   const [currentLine, setCurrentLine] = useState<Book['currentLine']>(0);
   const [fontSize, setFontSize] = useState<NonNullable<TextOptions['fontSize']>>(18);
@@ -34,6 +32,7 @@ export const BookReader = () => {
   const silentAudioRef = useRef(new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'));
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const playButtonRef = useRef<HTMLButtonElement>(null);
+  const isUserScrollRef = useRef(false);
   const shouldSync = useRef(false);
 
   const loadBook = async (id: string) => {
@@ -208,27 +207,11 @@ export const BookReader = () => {
   }, [flushUpdate]);
 
   useEffect(() => {
-    if (isScrolling || !isPlaying) return;
+    if (isUserScrollRef.current || !isPlaying) return;
 
     lineRefs.current[currentLine]?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
     lineRefs.current[currentLine]?.focus({ preventScroll: true });
-  }, [isScrolling, isPlaying, currentLine]);
-
-  useEffect(() => {
-    const target = lineRefs.current[currentLine];
-    if (!target || loading) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setShowJumpButton(!entry.isIntersecting);
-      },
-      { root: null, threshold: 0.5 },
-    );
-
-    observer.observe(target);
-
-    return () => observer.disconnect();
-  }, [currentLine, loading]);
+  }, [isPlaying, currentLine]);
 
   useEffect(() => {
     if ('mediaSession' in navigator) {
@@ -280,10 +263,9 @@ export const BookReader = () => {
   return (
     <div className="min-h-full relative">
       <section
-        onScroll={() => {
-          setIsScrolling(true);
-        }}
-        className="min-h-[90vh] h-[50vh] max-h-3/4 overflow-auto px-12 pt-6 leading-loose"
+        onWheel={() => (isUserScrollRef.current = true)}
+        onTouchMove={() => (isUserScrollRef.current = true)}
+        className="relative min-h-[90vh] h-[50vh] max-h-3/4 overflow-auto px-12 pt-6 pb-6 leading-loose"
       >
         <header className="relative text-center mb-4">
           <button className="absolute top-2 left-0 p-0!" onClick={() => navigate('/')} title="Back to Books">
@@ -293,24 +275,7 @@ export const BookReader = () => {
           <h3 className="font-semibold">{book.title}</h3>
         </header>
 
-        {showJumpButton ? (
-          <button
-            onClick={() => {
-              lineRefs.current[currentLine]?.scrollIntoView({ behavior: 'auto', block: 'center' });
-              setTimeout(() => {
-                setIsScrolling(false);
-                playButtonRef.current?.focus();
-              }, 0);
-            }}
-            className="fixed top-4 right-2"
-            title={`Jump to ${isPlaying ? 'last ' : ''}read`}
-          >
-            <BookmarkPlus fill="orange" strokeWidth={1.2} />
-          </button>
-        ) : (
-          <></>
-        )}
-
+        {/* Book Lines */}
         <ol
           onKeyDown={(e) => {
             let nextLine = currentLine;
@@ -355,6 +320,33 @@ export const BookReader = () => {
           ))}
         </ol>
       </section>
+
+      {/* Scroobar Marker */}
+      <div
+        className="absolute top-3 right-0.5 w-3 pointer-events-none z-10"
+        style={{
+          minHeight: 'calc(90vh - 1.5rem)',
+          height: 'calc(50vh - 1.5rem)',
+          maxHeight: 'calc(75% - 1.5rem)',
+        }}
+      >
+        <button
+          onClick={() => {
+            isUserScrollRef.current = false;
+            lineRefs.current[currentLine]?.scrollIntoView({ behavior: 'auto', block: 'center' });
+            setTimeout(() => {
+              isUserScrollRef.current = false;
+              playButtonRef.current?.focus();
+            }, 100);
+          }}
+          title="Jump to read"
+          className={`absolute right-0 w-full h-1 rounded-full bg-amber-400 cursor-pointer pointer-events-auto transition-all duration-300 p-0! focus:outline-none! hover:scale-125`}
+          style={{
+            top: `${calculateProgress(currentLine, lines.length - 1)}%`,
+            transform: 'translateY(-50%)',
+          }}
+        />
+      </div>
 
       {/* Controller Panel */}
       <div className="fixed bottom-0 left-0 h-[10vh] w-full bg-gray-50 flex justify-between items-center p-8 text-sm [&>*]:px-2 [&>*]:py-4 [&>*]:h-12 [&>*:hover]:bg-gray-100 [&>*:hover]:rounded-lg">
@@ -408,7 +400,7 @@ export const BookReader = () => {
 
         {book ? (
           <span title={`Line ${currentLine} of ${lines.length}`} className="bg-transparent!">
-            Progress: {calculateProgress(book.currentLine, book.totalLines)}%
+            Progress: {calculateProgress(currentLine, lines.length)}%
           </span>
         ) : (
           <></>
