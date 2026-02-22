@@ -1,8 +1,8 @@
 import { UploadProgressDialog } from '@/components/UploadProgress';
 import { api } from '@/services/api';
 import { calculateProgress, formatLocaleDateString, type Book } from '@audiobook/shared';
-import { BookOpen, Loader, Trash2, Upload } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { BookOpen, Loader, RotateCcw, Trash2, Upload } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export const BookList = () => {
@@ -13,7 +13,7 @@ export const BookList = () => {
   const [showCompleted, setShowCompleted] = useState(true);
   const [selectedBooks, setSelectedBooks] = useState<Book['id'][]>([]);
 
-  const canDelete = isEdit && selectedBooks.length > 0;
+  const canAction = isEdit && selectedBooks.length > 0;
   const booksCompleted = books.filter((book) => book.lastCompleted);
   const booksToRead = books.filter((book) => !book.lastCompleted);
 
@@ -55,19 +55,47 @@ export const BookList = () => {
     }
   };
 
+  const handleReset = async () => {
+    if (!confirm('Reset selected books?')) return;
+
+    setLoading(true);
+    try {
+      await Promise.all(selectedBooks.map((bookId) => api.books.update(bookId, { currentLine: 0, lastCompleted: '' })));
+      await loadBooks();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to reset selected books');
+      setLoading(false);
+    } finally {
+      closeEdit();
+    }
+  };
+
   const handleEditBooks = () => {
     setSelectedBooks([]);
     setIsEdit((prev) => !prev);
   };
 
-  const closeEdit = () => {
+  const closeEdit = useCallback(() => {
     setSelectedBooks([]);
     if (isEdit) setIsEdit(false);
-  };
+  }, [isEdit]);
 
   useEffect(() => {
     loadBooks();
   }, [uploadingFile]);
+
+  // hijack the browser's default escape
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isEdit) {
+        e.preventDefault();
+        closeEdit();
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [isEdit, closeEdit]);
 
   if (loading) {
     return (
@@ -86,15 +114,15 @@ export const BookList = () => {
       {/* Upload */}
       <label className="flex justify-center items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 active:bg-blue-800">
         <Upload size={16} />
-        <span>Upload a new book (txt, pdf, epub, mobi)</span>
-        <input aria-label="upload" type="file" accept=".txt,.pdf,.epub,.mobi" tabIndex={0} disabled={loading} onChange={handleUpload} onClick={() => closeEdit()} className="hidden" />
+        <span>Upload a new book (txt, epub)</span>
+        <input aria-label="upload" type="file" accept=".txt,.pdf,.epub,.mobi" tabIndex={0} disabled={loading} onChange={handleUpload} onClick={closeEdit} className="hidden" />
       </label>
 
       {/* Edit Panel */}
       <div className="relative my-4 flex justify-end items-center text-xs text-gray-400">
         <button
           aria-label="Delete"
-          disabled={!canDelete}
+          disabled={!canAction}
           onClick={(e) => {
             e.stopPropagation();
             handleDelete();
@@ -105,10 +133,29 @@ export const BookList = () => {
               handleDelete();
             }
           }}
-          className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 ${canDelete ? 'shake-active bg-red-100 text-red-600' : 'text-red-800! opacity-50 cursor-not-allowed'}`}
+          className={`absolute top-1/2 left-1/3 transform -translate-x-1/3 -translate-y-1/2 ${canAction ? 'shake-active bg-red-100 text-red-600' : 'text-red-800! opacity-50 cursor-not-allowed'}`}
           style={{ visibility: isEdit ? 'visible' : 'hidden' }}
         >
           <Trash2 size={16} />
+        </button>
+
+        <button
+          aria-label="Reset"
+          disabled={!canAction}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleReset();
+          }}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === ' ' || e.key === 'Enter') {
+              handleReset();
+            }
+          }}
+          className={`absolute top-1/2 left-2/3 transform -translate-x-2/3 -translate-y-1/2 ${canAction ? 'shake-active bg-amber-100 text-amber-600' : 'text-amber-800! opacity-50 cursor-not-allowed'}`}
+          style={{ visibility: isEdit ? 'visible' : 'hidden' }}
+        >
+          <RotateCcw size={16} />
         </button>
         <button aria-label={isEdit ? 'Done' : 'Edit'} onClick={handleEditBooks} className="hover:text-gray-600 transition-colors">
           {isEdit ? 'Done' : 'Edit'}
@@ -116,26 +163,22 @@ export const BookList = () => {
       </div>
 
       {/* No Books */}
-      {books.length === 0 ? (
+      {books.length === 0 && (
         <div className="text-center text-gray-500 col-span-full">
           <BookOpen className="mx-auto mb-4 opacity-50" />
           <p>No books yet. Upload your first book to get started!</p>
         </div>
-      ) : (
-        <></>
       )}
 
       {/* Books To Read */}
       <div className="py-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {booksToRead.length === 0 && booksCompleted.length > 0 ? (
+        {booksToRead.length === 0 && booksCompleted.length > 0 && (
           <div className="text-center text-gray-500 col-span-full">
             <BookOpen className="mx-auto mb-4 opacity-50" />
             <p>Upload a new book!</p>
           </div>
-        ) : (
-          <></>
         )}
-        {booksToRead.length > 0 ? (
+        {booksToRead.length > 0 &&
           booksToRead.map((book) => {
             const progress = calculateProgress(book.currentLine, book.totalLines);
             return (
@@ -189,14 +232,11 @@ export const BookList = () => {
                 )}
               </div>
             );
-          })
-        ) : (
-          <></>
-        )}
+          })}
       </div>
 
       {/* Books Completed */}
-      {booksCompleted.length > 0 ? (
+      {booksCompleted.length > 0 && (
         <>
           <div className="my-4 text-xs text-gray-400 text-center flex-1 flex justify-center items-end">
             <button
@@ -214,9 +254,7 @@ export const BookList = () => {
           <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${showCompleted ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
             <div className="overflow-hidden">
               <div className="py-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {booksCompleted.length === 0 ? (
-                  <></>
-                ) : (
+                {booksCompleted.length !== 0 &&
                   booksCompleted.map((book) => {
                     return (
                       <div
@@ -261,14 +299,11 @@ export const BookList = () => {
                         <div className="text-xs">Last Read: {formatLocaleDateString(new Date(book.lastRead!))}</div>
                       </div>
                     );
-                  })
-                )}
+                  })}
               </div>
             </div>
           </div>
         </>
-      ) : (
-        <></>
       )}
 
       {/* Upload Progress Dialog */}
