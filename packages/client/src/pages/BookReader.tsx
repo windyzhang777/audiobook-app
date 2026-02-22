@@ -5,7 +5,7 @@ import { api } from '@/services/api';
 import { speechService, type SpeechConfigs } from '@/services/SpeechService';
 import { calculateProgress, PAGE_SIZE, type Book, type BookContent, type SpeechOptions, type TextOptions } from '@audiobook/shared';
 import { AArrowDown, AArrowUp, ArrowLeft, AudioLines, LibraryBig, Loader, Loader2, MapPin, Pause, Play, Search, UsersRound, X } from 'lucide-react';
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Virtuoso, type LocationOptions, type VirtuosoHandle } from 'react-virtuoso';
 
@@ -91,18 +91,17 @@ export const BookReader = () => {
     setReadingMode(readingMode);
   };
 
-  const scrollToLine = (index: number = currentLine, behavior: LocationOptions['behavior'] = 'smooth') => {
+  const scrollToLine = useCallback((index: number, behavior: LocationOptions['behavior'] = 'smooth') => {
     virtuosoRef.current?.scrollToIndex({ index, align: 'center', behavior });
-  };
+  }, []);
 
   const handlePlayPause = () => {
     if (!id) return;
 
-    jumpToRead();
-
     if (isPlaying) {
       speechService.pause();
     } else {
+      jumpToRead();
       const startFrom = currentLine >= totalLines ? 0 : currentLine;
       // if at the end, reset to start from the first line
       if (startFrom === 0) setCurrentLine(0);
@@ -214,12 +213,12 @@ export const BookReader = () => {
     if (isUserScrollRef.current || !isPlaying) return;
     isUserFocusRef.current = false;
 
-    const handleAutoScroll = () => {
-      virtuosoRef.current?.scrollToIndex({ index: currentLine, align: 'center', behavior: 'smooth' });
-    };
+    const timer = setTimeout(() => {
+      scrollToLine(currentLine);
+    }, 100);
 
-    handleAutoScroll();
-  }, [isPlaying, currentLine]);
+    return () => clearTimeout(timer);
+  }, [isPlaying, currentLine, scrollToLine]);
 
   useEffect(() => {
     if (!voice || availableVoices.length <= 2) return;
@@ -513,7 +512,7 @@ export const BookReader = () => {
               speechService.stop();
               forceControl(false, 'focus');
             }}
-            className="h-full w-fit pl-4 cursor-pointer text-center bg-transparent rounded-md outline-none focus:ring-2 focus:ring-gray-200"
+            className="h-full min-w-30 pl-4 cursor-pointer text-center bg-transparent rounded-md"
           >
             {availableVoices.map((voice) => (
               <option
@@ -565,7 +564,7 @@ export const BookReader = () => {
               }
               forceControl(false, 'focus');
             }}
-            className="h-full min-w-30 pl-4 cursor-pointer text-center bg-transparent rounded-md outline-none focus:ring-2 focus:ring-gray-200"
+            className="h-full min-w-30 pl-4 cursor-pointer text-center bg-transparent rounded-md"
           >
             {SPEECH_RATE_OPTIONS.map((rate) => (
               <option key={`rate-${rate}`} value={rate}>
