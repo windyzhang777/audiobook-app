@@ -56,7 +56,7 @@ export const BookList = () => {
   };
 
   const handleReset = async () => {
-    if (!confirm('Reset selected books?')) return;
+    if (!confirm('Reset progress for selected books?')) return;
 
     setLoading(true);
     try {

@@ -17,6 +17,11 @@ export interface UserSettings {
   theme: 'light' | 'dark' | 'system';
 }
 
+export interface BookMark {
+  index: number;
+  text: string;
+}
+
 export interface Book {
   id: string;
   userId: string;
@@ -32,6 +37,7 @@ export interface Book {
   lastRead?: string; // ISO string
   updatedAt: string; // ISO string
   lastCompleted?: string; // ISO string
+  bookmarks?: BookMark[];
 
   // setting for TTS per book
   settings?: SpeechOptions & TextOptions;

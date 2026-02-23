@@ -3,8 +3,8 @@ import { useUpdateBook } from '@/common/useUpdateBook';
 import { triggerSuccess } from '@/helper';
 import { api } from '@/services/api';
 import { speechService, type SpeechConfigs } from '@/services/SpeechService';
-import { calculateProgress, PAGE_SIZE, type Book, type BookContent, type SpeechOptions, type TextOptions } from '@audiobook/shared';
-import { ArrowLeft, AudioLines, LibraryBig, Loader, Loader2, MapPin, Minus, Pause, Play, Plus, Search, UsersRound, X } from 'lucide-react';
+import { calculateProgress, PAGE_SIZE, type Book, type BookContent, type BookMark, type SpeechOptions, type TextOptions } from '@audiobook/shared';
+import { ArrowLeft, AudioLines, Bookmark, BookmarkX, LibraryBig, Loader, Loader2, MapPin, Minus, Pause, Play, Plus, Search, UsersRound, X } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Virtuoso, type LocationOptions, type VirtuosoHandle } from 'react-virtuoso';
@@ -12,6 +12,7 @@ import { Virtuoso, type LocationOptions, type VirtuosoHandle } from 'react-virtu
 export type ReadingMode = 'user' | 'focus';
 
 const SPEECH_RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
+const BOOKMARK_TEXT_LIMIT = 20;
 
 type VoiceType = 'system' | 'cloud';
 export interface VoiceOption {
@@ -44,13 +45,15 @@ export const BookReader = () => {
   const [voice, setVoice] = useState<VoiceOption['id']>();
   const [selectedVoice, setSelectedVoice] = useState<VoiceOption>(VOICE_FALLBACK);
   const [lastCompleted, setLastCompleted] = useState<string>();
+  const [bookmarks, setBookmarks] = useState<BookMark[]>([]);
   const updatedBook = useMemo(
     () => ({
       currentLine,
       lastCompleted,
+      bookmarks,
       settings: { ...(book?.settings || {}), fontSize, rate: speechRate, voice: selectedVoice.id },
     }),
-    [book?.settings, currentLine, lastCompleted, fontSize, speechRate, selectedVoice.id],
+    [book?.settings, currentLine, lastCompleted, bookmarks, fontSize, speechRate, selectedVoice.id],
   );
   const canUpdate = !loading && JSON.stringify(updatedBook) !== JSON.stringify({ currentLine: book?.currentLine, settings: book?.settings });
 
@@ -154,10 +157,19 @@ export const BookReader = () => {
     }
   };
 
+  const toggleBookmark = (index: number, text: string) => {
+    const truncatedText = text.length > BOOKMARK_TEXT_LIMIT ? text.slice(0, BOOKMARK_TEXT_LIMIT) + '...' : text;
+    setBookmarks((prev) => {
+      const exists = prev.find((b) => b.index === index);
+      if (exists) {
+        return prev.filter((b) => b.index !== index);
+      }
+      return [...prev, { index, text: truncatedText }].sort((a, b) => a.index - b.index);
+    });
+  };
+
   const { flushUpdate } = useUpdateBook(id, updatedBook, canUpdate, setBook);
   const { searchInputRef, searchText, setSearchText, searchRes, currentMatch, prevMatch, nextMatch, clearSearch } = useSearchBook(id, currentLine, jumpToIndex, forceControl);
-
-  console.log(`readingMode :`, readingMode, showJumpButton && isPlaying, searchText);
 
   useEffect(() => {
     if (!id) return;
@@ -173,6 +185,7 @@ export const BookReader = () => {
         setSpeechRate(book.settings?.rate || 1.0);
         setVoice(book.settings?.voice || VOICE_FALLBACK.id);
         setLastCompleted(book.lastCompleted || undefined);
+        setBookmarks(book.bookmarks || []);
 
         await loadBookContent(id, 0, (book.currentLine || 0) + PAGE_SIZE);
       } catch (error) {
@@ -345,8 +358,9 @@ export const BookReader = () => {
         }}
         // Individual Line Item
         itemContent={(index, line) => {
-          const isCurrentMatch = searchRes[currentMatch] === index;
+          const isBookmarked = bookmarks.some((b) => b.index === index);
 
+          const isCurrentMatch = searchRes[currentMatch] === index;
           const getHighlightedText = (text: string, highlight: string) => {
             if (!highlight.trim()) return text;
             const parts = text.split(new RegExp(`(${highlight})`, 'gi'));
@@ -371,10 +385,19 @@ export const BookReader = () => {
               role="button"
               tabIndex={index === currentLine ? 0 : -1}
               aria-current={index === currentLine ? 'location' : undefined}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                toggleBookmark(index, line);
+              }}
               onDoubleClick={() => handleLineClick(index)}
-              className={`cursor-pointer px-2 transition-colors duration-200 ease-in-out rounded-lg ${index === currentLine ? 'bg-amber-100 font-medium' : ''} focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-opacity-50`}
+              className={`relative cursor-pointer px-2 transition-colors duration-200 ease-in-out rounded-lg ${index === currentLine ? 'bg-amber-100 font-medium' : ''} focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-opacity-50 ${isBookmarked ? 'border border-r-4 border-amber-400 pr-2' : 'border-r-4 border-transparent'}`}
             >
               {searchText ? getHighlightedText(line, searchText) : line}
+              {isBookmarked && (
+                <span className="absolute -right-8 top-1/2 -translate-y-1/2 text-amber-400">
+                  <Bookmark size={16} fill="currentColor" />
+                </span>
+              )}
             </li>
           );
         }}
@@ -393,7 +416,7 @@ export const BookReader = () => {
         <button
           onClick={() => jumpToRead('focus')}
           title="Jump to read"
-          className={`absolute right-0 w-full h-1 rounded-full bg-amber-200 cursor-pointer pointer-events-auto transition-all duration-300 p-0!  hover:scale-125`}
+          className={`absolute right-0 w-full h-1 rounded-full bg-amber-200 cursor-pointer pointer-events-auto transition-all duration-300 p-0! hover:scale-125`}
           style={{
             top: `${calculateProgress(currentLine, lines.length - 1)}%`,
             transform: 'translateY(-50%)',
@@ -413,7 +436,7 @@ export const BookReader = () => {
       {/* Side Panel */}
       <div
         id="side-panel"
-        className="fixed bottom-25 left-2 h-auto text-sm text-gray-400 flex flex-col justify-end gap-1 rounded-md bg-transparent z-10 [&>button]:flex [&>button]:items-center [&>button]:py-1 [&>button]:bg-transparent [&>button]:hover:bg-amber-200"
+        className="fixed bottom-25 left-2 h-auto text-sm text-gray-400 flex flex-col justify-end gap-1 rounded-md bg-transparent z-10 [&>button]:flex [&>button]:items-center [&>button]:py-1 [&>button]:bg-transparent [&>button]:hover:bg-amber-200 [&>button]:hover:text-gray-600"
       >
         {/* Jump to read button */}
         <button id="jump-to-read" title="Jump to read" onClick={() => jumpToRead('focus')} className={showJumpButton ? 'text-gray-600!' : 'text-inherit'}>
@@ -495,15 +518,15 @@ export const BookReader = () => {
       {/* Controller Panel */}
       <div
         onMouseEnter={() => readingMode === 'focus' && forceControl(true, 'user')}
-        onMouseLeave={() => isPlaying && readingMode === 'user' && forceControl(false, 'focus')}
+        onMouseLeave={() => isPlaying && readingMode === 'user' && forceControl(true, 'focus')}
         className={`fixed bottom-0 left-0 h-[10vh] w-full bg-gray-50 border-t border-gray-200 flex justify-between items-center p-8 text-sm *:px-2 *:py-4 *:h-12 transition-transform duration-500 ease-in-out z-50 cursor-pointer ${readingMode === 'focus' ? 'translate-y-[calc(100%-10px)] opacity-50 grayscale' : 'translate-y-0 opacity-100 grayscale-0'}`}
       >
-        <span className="relative p-0!" title="Select Voice">
-          <label htmlFor="voice-select" className="absolute top-1/2 -translate-y-1/2 left-2 ">
+        <span id="select-voice" className="relative p-0!" title="Select Voice">
+          <label htmlFor="select-voice" className="absolute top-1/2 -translate-y-1/2 left-2 pointer-events-none">
             <UsersRound size={16} />
           </label>
           <select
-            id="voice-select"
+            id="select-voice"
             value={selectedVoice.id}
             onClick={() => {
               if (isPlaying) isUserFocusRef.current = true;
@@ -529,12 +552,12 @@ export const BookReader = () => {
           </select>
         </span>
 
-        <span className="relative p-0!" title="Speech Rate">
-          <label htmlFor="rate-select" className="absolute top-1/2 -translate-y-1/2 left-2 ">
+        <span id="select-rate" className="relative p-0!" title="Speech Rate">
+          <label htmlFor="select-rate" className="absolute top-1/2 -translate-y-1/2 left-2 pointer-events-none">
             <AudioLines size={16} />
           </label>
           <select
-            id="rate-select"
+            id="select-rate"
             value={speechRate}
             onClick={() => {
               if (isPlaying) isUserFocusRef.current = true;
@@ -563,6 +586,46 @@ export const BookReader = () => {
             ))}
           </select>
         </span>
+
+        <span id="select-bookmark" className="relative p-0!" title="Right-click a line to add/remove bookmark">
+          <label htmlFor="select-bookmark" className="absolute top-1/2 -translate-y-1/2 left-2 pointer-events-none">
+            <Bookmark size={16} />
+          </label>
+          <select
+            id="select-bookmark"
+            value={bookmarks.find((b) => b.index === currentLine) ? currentLine : ''}
+            onClick={() => {
+              if (isPlaying) isUserFocusRef.current = true;
+            }}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val !== '') {
+                jumpToIndex(parseInt(val));
+                forceControl(true, 'user');
+              }
+            }}
+            className="h-full min-w-30 max-w-52 pl-8 cursor-pointer text-center bg-transparent rounded-md"
+          >
+            <option value="" disabled>
+              {bookmarks.length > 0 ? 'Jump to Bookmark...' : 'No Bookmarks'}
+            </option>
+            {bookmarks.map((bookmark) => (
+              <option key={`bookmark-${bookmark.index}`} value={bookmark.index} className="text-ellipsis">
+                Line {bookmark.index + 1}: {bookmark.text}
+              </option>
+            ))}
+          </select>
+        </span>
+
+        <button
+          onClick={() => {
+            if (!confirm('Deleted all bookmarks?')) return;
+            setBookmarks([]);
+          }}
+          title="Remove all bookmarks"
+        >
+          <BookmarkX size={16} />
+        </button>
 
         {book && (
           <span title={`Progress: Line ${currentLine} of ${totalLines}`} className="bg-transparent! text-gray-600 focus:ring-0! focus:outline-none!">
