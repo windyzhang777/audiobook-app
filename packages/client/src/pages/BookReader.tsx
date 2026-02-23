@@ -4,12 +4,12 @@ import { triggerSuccess } from '@/helper';
 import { api } from '@/services/api';
 import { speechService, type SpeechConfigs } from '@/services/SpeechService';
 import { calculateProgress, PAGE_SIZE, type Book, type BookContent, type SpeechOptions, type TextOptions } from '@audiobook/shared';
-import { AArrowDown, AArrowUp, ArrowLeft, AudioLines, LibraryBig, Loader, Loader2, MapPin, Pause, Play, Search, UsersRound, X } from 'lucide-react';
+import { ArrowLeft, AudioLines, LibraryBig, Loader, Loader2, MapPin, Minus, Pause, Play, Plus, Search, UsersRound, X } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Virtuoso, type LocationOptions, type VirtuosoHandle } from 'react-virtuoso';
 
-export type ReadingMode = 'idle' | 'focus' | 'search';
+export type ReadingMode = 'user' | 'focus';
 
 const SPEECH_RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 
@@ -35,7 +35,7 @@ export const BookReader = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showJumpButton, setShowJumpButton] = useState(false);
-  const [readingMode, setReadingMode] = useState<ReadingMode>('idle');
+  const [readingMode, setReadingMode] = useState<ReadingMode>('user');
   const [error, setError] = useState<string>();
   const [showRateIndicator, setShowRateIndicator] = useState(false);
   const [currentLine, setCurrentLine] = useState<Book['currentLine']>(0);
@@ -74,19 +74,19 @@ export const BookReader = () => {
     navigate('/', { replace });
   };
 
-  const forceControl = (isUserControl: boolean = true, mode: ReadingMode = 'idle') => {
+  const forceControl = (isUserControl: boolean = true, mode: ReadingMode = 'focus') => {
     isUserScrollRef.current = isUserControl;
     isUserFocusRef.current = isUserControl;
     if (readingMode === mode) return;
 
     if (isUserControl) {
-      setReadingMode(mode || 'focus');
+      setReadingMode(mode);
     } else {
       handleClearSearch(mode);
     }
   };
 
-  const handleClearSearch = (readingMode: ReadingMode = 'idle') => {
+  const handleClearSearch = (readingMode: ReadingMode = 'focus') => {
     clearSearch();
     setReadingMode(readingMode);
   };
@@ -101,7 +101,6 @@ export const BookReader = () => {
     if (isPlaying) {
       speechService.pause();
     } else {
-      jumpToRead();
       const startFrom = currentLine >= totalLines ? 0 : currentLine;
       // if at the end, reset to start from the first line
       if (startFrom === 0) setCurrentLine(0);
@@ -113,14 +112,11 @@ export const BookReader = () => {
   const handleLineClick = (lineIndex: number) => {
     forceControl(false, 'focus');
     setCurrentLine(lineIndex);
-
-    if (isPlaying) {
-      speechService.resume(lineIndex, speechConfigs());
-    }
+    speechService.stop();
   };
 
-  const jumpToRead = () => {
-    forceControl(false, 'focus');
+  const jumpToRead = (mode: ReadingMode = 'focus') => {
+    forceControl(false, mode);
     scrollToLine(currentLine, 'auto');
   };
 
@@ -160,6 +156,8 @@ export const BookReader = () => {
 
   const { flushUpdate } = useUpdateBook(id, updatedBook, canUpdate, setBook);
   const { searchInputRef, searchText, setSearchText, searchRes, currentMatch, prevMatch, nextMatch, clearSearch } = useSearchBook(id, currentLine, jumpToIndex, forceControl);
+
+  console.log(`readingMode :`, readingMode, showJumpButton && isPlaying, searchText);
 
   useEffect(() => {
     if (!id) return;
@@ -287,7 +285,12 @@ export const BookReader = () => {
       <Virtuoso
         id="book-lines"
         ref={virtuosoRef}
-        className="min-h-[90vh] h-[50vh] max-h-3/4 w-full leading-loose"
+        className="w-full leading-loose transition-transform duration-500 ease-in-out"
+        style={{
+          minHeight: readingMode === 'focus' ? 'calc(100vh - 10px)' : '90vh',
+          height: '50vh',
+          maxHeight: '75%',
+        }}
         data={lines}
         initialTopMostItemIndex={{ index: 0, align: 'center' }}
         increaseViewportBy={200}
@@ -319,8 +322,8 @@ export const BookReader = () => {
               {...props}
               ref={ref}
               tabIndex={0}
-              onWheel={() => forceControl(true, readingMode)}
-              onTouchMove={() => forceControl(true, readingMode)}
+              onWheel={() => forceControl(true, 'focus')}
+              onTouchMove={() => forceControl(true, 'focus')}
               className="outline-none list-none text-left px-12"
               style={{ ...style, fontSize }}
             >
@@ -380,15 +383,15 @@ export const BookReader = () => {
       {/* Scrollbar Marker */}
       <div
         id="scrollbar-marker"
-        className="absolute top-3 right-0.5 w-3 pointer-events-none z-10"
+        className="absolute top-3 right-0.5 w-3 pointer-events-none z-10 transition-transform duration-500 ease-in-out"
         style={{
-          minHeight: 'calc(90vh - 1.5rem)',
+          minHeight: readingMode === 'focus' ? 'calc(100vh - 10px - 1.5rem)' : '90vh',
           height: 'calc(50vh - 1.5rem)',
           maxHeight: 'calc(75% - 1.5rem)',
         }}
       >
         <button
-          onClick={jumpToRead}
+          onClick={() => jumpToRead('focus')}
           title="Jump to read"
           className={`absolute right-0 w-full h-1 rounded-full bg-amber-200 cursor-pointer pointer-events-auto transition-all duration-300 p-0!  hover:scale-125`}
           style={{
@@ -410,26 +413,22 @@ export const BookReader = () => {
       {/* Side Panel */}
       <div
         id="side-panel"
-        className={`fixed bottom-25 left-2 h-auto flex flex-col justify-end ${readingMode !== 'search' ? 'justify-center' : 'justify-start'} gap-1 rounded-md hover:bg-amber-200 bg-gray-200/0 z-10`}
+        className="fixed bottom-25 left-2 h-auto text-sm text-gray-400 flex flex-col justify-end gap-1 rounded-md bg-transparent z-10 [&>button]:flex [&>button]:items-center [&>button]:py-1 [&>button]:bg-transparent [&>button]:hover:bg-amber-200"
       >
         {/* Jump to read button */}
-        {showJumpButton && (
-          <button
-            id="jump-to-read"
-            onClick={jumpToRead}
-            className={`px-2! flex items-center py-1 rounded transition-all duration-300 bg-transparent ${readingMode !== 'search' ? 'text-gray-400' : 'text-gray-600'}`}
-          >
-            <MapPin className={`w-4 h-4 ${readingMode !== 'search' ? 'text-gray-400' : 'text-gray-600'}`} />
-          </button>
-        )}
+        <button id="jump-to-read" title="Jump to read" onClick={() => jumpToRead('focus')} className={showJumpButton ? 'text-gray-600!' : 'text-inherit'}>
+          <MapPin size={16} />
+        </button>
+
+        {/* Play/Pause */}
+        <button id={isPlaying ? 'pause' : 'play'} onClick={handlePlayPause} title={isPlaying ? 'Pause' : 'Play'} className={isPlaying ? 'text-gray-600' : 'text-green-600'}>
+          {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+        </button>
 
         {/* Search text */}
-        <button
-          onClick={() => searchInputRef.current?.focus()}
-          className={`px-2! flex items-center gap-0.5! py-1 rounded transition-all duration-300 ${searchText.length > 0 ? 'bg-amber-200 shadow-md' : 'bg-transparent'}`}
-        >
-          <Search size={14} className={`w-4 h-4 ${readingMode !== 'search' ? 'text-gray-400' : 'text-gray-600'}`} />
-          {readingMode === 'search' && (
+        <button id="search" onClick={() => searchInputRef.current?.focus()} title="Search text" className={searchText.length > 0 ? 'bg-amber-200! shadow-md' : 'bg-inherit gap-0!'}>
+          <Search size={16} className={readingMode === 'user' ? 'text-gray-600' : 'text-inherit'} />
+          {readingMode === 'user' && (
             <>
               <input
                 id="search-text"
@@ -453,9 +452,9 @@ export const BookReader = () => {
                     handleClearSearch();
                   }
                 }}
-                className="h-4 bg-transparent outline-none text-gray-600 text-sm"
+                className="h-4 outline-none text-gray-600"
                 style={{
-                  width: searchText.length > 0 ? `${Math.min(searchText.length, 20)}rem` : '1rem',
+                  width: searchText.length > 0 ? `${Math.min(searchText.length, 20)}rem` : '0',
                 }}
               />
               {searchText.length > 0 && (
@@ -471,33 +470,36 @@ export const BookReader = () => {
                 </button>
               )}
               {searchRes.length > 0 && (
-                <div className={`flex items-center border-l pl-1 mx-1 text-xs text-gray-400/60 animate-in fade-in ${readingMode !== 'search' ? 'text-gray-400' : 'text-gray-600'}`}>
+                <div className={`flex items-center border-l pl-1 mx-1 text-xs text-gray-400/60 animate-in fade-in ${readingMode !== 'user' ? 'text-gray-400' : 'text-gray-600'}`}>
                   {currentMatch + 1}/{searchRes.length}
                 </div>
               )}
             </>
           )}
         </button>
+
+        {/* Text Size */}
+        <button id="text-size-up" onClick={() => setFontSize(fontSize + 1)} title="Text Size Up">
+          <Plus size={16} />
+        </button>
+        <button id="text-size-down" onClick={() => setFontSize(fontSize - 1)} title="Text Size Down">
+          <Minus size={16} />
+        </button>
+
+        {/* Nav back to books */}
+        <button id="back-to-books" onClick={() => navigateBack()} title="Back to Books">
+          <LibraryBig size={16} />
+        </button>
       </div>
 
       {/* Controller Panel */}
-      <div className="fixed bottom-0 left-0 h-[10vh] w-full bg-gray-50 flex justify-between items-center p-8 text-sm *:px-2 *:py-4 *:h-12">
-        <button className="text-sm" onClick={() => navigateBack()} title="Back to Books">
-          <LibraryBig size={16} />
-        </button>
-
-        {isPlaying ? (
-          <button onClick={handlePlayPause} title="Pause">
-            <Pause className="w-7 h-7 p-1.5 rounded-full bg-gray-600 text-white hover:bg-gray-700 active:bg-gray-700" />
-          </button>
-        ) : (
-          <button onClick={handlePlayPause} title="Play">
-            <Play className="w-7 h-7 p-1.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-700" />
-          </button>
-        )}
-
+      <div
+        onMouseEnter={() => readingMode === 'focus' && forceControl(true, 'user')}
+        onMouseLeave={() => isPlaying && readingMode === 'user' && forceControl(false, 'focus')}
+        className={`fixed bottom-0 left-0 h-[10vh] w-full bg-gray-50 border-t border-gray-200 flex justify-between items-center p-8 text-sm *:px-2 *:py-4 *:h-12 transition-transform duration-500 ease-in-out z-50 cursor-pointer ${readingMode === 'focus' ? 'translate-y-[calc(100%-10px)] opacity-50 grayscale' : 'translate-y-0 opacity-100 grayscale-0'}`}
+      >
         <span className="relative p-0!" title="Select Voice">
-          <label htmlFor="voice-select" className="absolute top-1/2 -translate-y-1/2 left-2">
+          <label htmlFor="voice-select" className="absolute top-1/2 -translate-y-1/2 left-2 ">
             <UsersRound size={16} />
           </label>
           <select
@@ -510,9 +512,8 @@ export const BookReader = () => {
               const found = availableVoices.find((voiceOption) => voiceOption.id === e.target.value);
               if (found) setSelectedVoice(found);
               speechService.stop();
-              forceControl(false, 'focus');
             }}
-            className="h-full min-w-30 pl-4 cursor-pointer text-center bg-transparent rounded-md"
+            className="h-full min-w-30 pl-8 cursor-pointer text-center bg-transparent rounded-md"
           >
             {availableVoices.map((voice) => (
               <option
@@ -528,18 +529,8 @@ export const BookReader = () => {
           </select>
         </span>
 
-        <span className="flex items-center" title="Text Size">
-          <button onClick={() => setFontSize(fontSize + 1)} title="Text Size Up">
-            <AArrowUp className="w-7 h-7 p-1.5 rounded-full bg-gray-400 text-white hover:bg-gray-700" />
-          </button>
-          <p>{fontSize}</p>
-          <button onClick={() => setFontSize(fontSize - 1)} title="Text Size Down">
-            <AArrowDown className="w-7 h-7 p-1.5 rounded-full bg-gray-400 text-white hover:bg-gray-700" />
-          </button>
-        </span>
-
         <span className="relative p-0!" title="Speech Rate">
-          <label htmlFor="rate-select" className="absolute top-1/2 -translate-y-1/2 left-2">
+          <label htmlFor="rate-select" className="absolute top-1/2 -translate-y-1/2 left-2 ">
             <AudioLines size={16} />
           </label>
           <select
@@ -562,9 +553,8 @@ export const BookReader = () => {
               if (isPlaying) {
                 speechService.resume(currentLine, speechConfigs(newRate));
               }
-              forceControl(false, 'focus');
             }}
-            className="h-full min-w-30 pl-4 cursor-pointer text-center bg-transparent rounded-md"
+            className="h-full min-w-30 pl-8 cursor-pointer text-center bg-transparent rounded-md"
           >
             {SPEECH_RATE_OPTIONS.map((rate) => (
               <option key={`rate-${rate}`} value={rate}>
@@ -576,7 +566,7 @@ export const BookReader = () => {
 
         {book && (
           <span title={`Progress: Line ${currentLine} of ${totalLines}`} className="bg-transparent! text-gray-600 focus:ring-0! focus:outline-none!">
-            {calculateProgress(currentLine, totalLines)}%
+            Progress: {calculateProgress(currentLine, totalLines)}%
           </span>
         )}
       </div>

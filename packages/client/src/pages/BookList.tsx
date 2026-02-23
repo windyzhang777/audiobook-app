@@ -122,6 +122,7 @@ export const BookList = () => {
       <div className="relative my-4 flex justify-end items-center text-xs text-gray-400">
         <button
           aria-label="Delete"
+          title="Delete books"
           disabled={!canAction}
           onClick={(e) => {
             e.stopPropagation();
@@ -141,6 +142,7 @@ export const BookList = () => {
 
         <button
           aria-label="Reset"
+          title="Reset progress"
           disabled={!canAction}
           onClick={(e) => {
             e.stopPropagation();

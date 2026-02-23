@@ -72,7 +72,7 @@ export function useSearchBook(
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
-        forceControl(true, 'search');
+        forceControl(true, 'user');
         setTimeout(() => {
           searchInputRef.current?.focus();
           searchInputRef.current?.select();
