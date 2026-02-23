@@ -2,7 +2,7 @@ import { api } from '@/services/api';
 import { ChunkedUploader, type UploadProgress } from '@/services/ChunkedUploader';
 import { formatBytes, formatTime } from '@audiobook/shared';
 import { AlertCircle, CircleCheck, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface UploadProgressProps {
   file: File;
@@ -26,6 +26,14 @@ export function UploadProgressDialog({ file, onComplete, onCancel }: UploadProgr
   const [error, setError] = useState<string>('');
   const uploaderRef = useRef<ChunkedUploader | null>(null);
   const uploadStarted = useRef(false);
+
+  const handleCancel = useCallback(() => {
+    if (uploaderRef.current) {
+      uploaderRef.current.cancel();
+    }
+    setStatus('cancelled');
+    onCancel?.();
+  }, [onCancel]);
 
   // Start upload on mount
   useEffect(() => {
@@ -55,13 +63,18 @@ export function UploadProgressDialog({ file, onComplete, onCancel }: UploadProgr
     startUpload();
   }, []);
 
-  const handleCancel = () => {
-    if (uploaderRef.current) {
-      uploaderRef.current.cancel();
-    }
-    setStatus('cancelled');
-    onCancel?.();
-  };
+  // hijack the browser's default escape
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && (status === 'completed' || status === 'error')) {
+        e.preventDefault();
+        handleCancel();
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [status, handleCancel]);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

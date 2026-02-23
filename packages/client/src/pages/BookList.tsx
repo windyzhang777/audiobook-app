@@ -222,7 +222,7 @@ export const BookList = () => {
                 className="flex flex-col justify-center items-center gap-4 bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer p-4"
                 style={{ backgroundColor: selectedBooks.includes(book.id) ? 'lightgray' : '' }}
               >
-                <h3 className="font-medium truncate">{book.title}</h3>
+                <h3 className="font-medium w-full truncate">{book.title}</h3>
                 {book.lastRead ? (
                   <div className="text-xs">Progress: {progress}%</div>
                 ) : (
@@ -297,7 +297,7 @@ export const BookList = () => {
                         className="flex flex-col justify-center items-center gap-4 bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer p-4"
                         style={{ backgroundColor: selectedBooks.includes(book.id) ? 'lightgray' : '' }}
                       >
-                        <h3 className="font-medium truncate">{book.title}</h3>
+                        <h3 className="font-medium w-full truncate">{book.title}</h3>
                         <div className="text-xs">Last Read: {formatLocaleDateString(new Date(book.lastRead!))}</div>
                       </div>
                     );
