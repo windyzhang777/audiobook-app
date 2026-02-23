@@ -455,7 +455,7 @@ export const BookReader = () => {
       {/* Side Panel */}
       <div
         id="side-panel"
-        className="fixed bottom-25 left-2 h-auto text-sm text-gray-400 flex flex-col justify-end gap-1 rounded-md bg-transparent z-10 [&>button]:flex [&>button]:items-center [&>button]:py-1 [&>button]:bg-transparent [&>button]:hover:bg-amber-200 [&>button]:hover:text-gray-600"
+        className="fixed bottom-25 left-2 h-auto text-sm text-gray-400 flex flex-col items-start gap-1 rounded-md bg-transparent z-10 [&>button]:flex [&>button]:items-center [&>button]:py-1 [&>button]:bg-transparent [&>button]:hover:bg-amber-200 [&>button]:hover:text-gray-600"
       >
         {/* Jump to read button */}
         <button id="jump-to-read" title="Jump to read" onClick={() => jumpToRead('focus')} className={showJumpButton ? 'text-gray-600!' : 'text-inherit'}>
