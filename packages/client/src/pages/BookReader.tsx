@@ -62,8 +62,12 @@ export const BookReader = () => {
   const isUserFocusRef = useRef(false);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const isSearchJumping = useRef(false);
+  const shouldResumeRef = useRef(false);
 
-  const speechConfigs = (rate: number = speechRate): SpeechConfigs => ({ bookId: id || '', lines, lang, rate, selectedVoice });
+  const speechConfigs = useCallback(
+    (rate: number = speechRate): SpeechConfigs => ({ bookId: id || '', lines, lang, rate, totalLines, selectedVoice }),
+    [id, lines, lang, totalLines, selectedVoice, speechRate],
+  );
 
   const availableVoices = useMemo(() => {
     const nativeVoices = speechService.getNativeVoices(lang);
@@ -128,7 +132,7 @@ export const BookReader = () => {
 
     isSearchJumping.current = true;
     if (lineIndex >= lines.length) {
-      await loadMoreLines(id, 0, lineIndex);
+      await loadMoreLines(0, lineIndex);
     }
     scrollToLine(lineIndex, 'auto');
     setTimeout(() => {
@@ -146,16 +150,19 @@ export const BookReader = () => {
     setHasMore(content.pagination.hasMore);
   };
 
-  const loadMoreLines = async (id: string, offset: number = 0, limit: number = PAGE_SIZE) => {
-    if (!hasMore || !id) return;
+  const loadMoreLines = useCallback(
+    async (offset: number = 0, limit: number = PAGE_SIZE) => {
+      if (!hasMore || !id || loadingMore) return;
 
-    setLoadingMore(true);
-    try {
-      await loadBookContent(id, offset, limit);
-    } finally {
-      setLoadingMore(false);
-    }
-  };
+      setLoadingMore(true);
+      try {
+        await loadBookContent(id, offset, limit);
+      } finally {
+        setLoadingMore(false);
+      }
+    },
+    [hasMore, id, loadingMore],
+  );
 
   const toggleBookmark = (index: number, text: string) => {
     const truncatedText = text.length > BOOKMARK_TEXT_LIMIT ? text.slice(0, BOOKMARK_TEXT_LIMIT) + '...' : text;
@@ -208,6 +215,10 @@ export const BookReader = () => {
   useEffect(() => {
     speechService.onLineEnd = (lineIndex) => setCurrentLine(lineIndex);
     speechService.onIsPlayingChange = (playing) => setIsPlaying(playing);
+    speechService.onLoadMoreLines = (linesIndex) => {
+      shouldResumeRef.current = true;
+      loadMoreLines(linesIndex);
+    };
     speechService.onBookCompleted = (date) => {
       if (!lastCompleted) triggerSuccess();
       setLastCompleted(date);
@@ -216,9 +227,17 @@ export const BookReader = () => {
     return () => {
       speechService.onLineEnd = null;
       speechService.onIsPlayingChange = null;
+      speechService.onLoadMoreLines = null;
       speechService.onBookCompleted = null;
     };
-  }, [lastCompleted]);
+  }, [lastCompleted, loadMoreLines]);
+
+  useEffect(() => {
+    if (!isPlaying || !lines[currentLine] || !shouldResumeRef.current) return;
+
+    shouldResumeRef.current = false;
+    speechService.resume(currentLine, speechConfigs());
+  }, [currentLine, lines, speechConfigs, isPlaying]);
 
   useEffect(() => {
     if (isUserScrollRef.current || !isPlaying) return;
@@ -308,12 +327,12 @@ export const BookReader = () => {
         initialTopMostItemIndex={{ index: 0, align: 'center' }}
         increaseViewportBy={200}
         endReached={() => {
-          if (!id || !hasMore || loadingMore || isSearchJumping.current) return;
-          loadMoreLines(id, lines.length);
+          if (!hasMore || loadingMore || isSearchJumping.current) return;
+          loadMoreLines(lines.length);
         }}
         atBottomStateChange={(atBottom) => {
-          if (!id || !atBottom || !hasMore || loadingMore) return;
-          loadMoreLines(id, lines.length);
+          if (!atBottom || !hasMore || loadingMore) return;
+          loadMoreLines(lines.length);
         }}
         rangeChanged={(range) => {
           const isVisible = currentLine >= range.startIndex && currentLine <= range.endIndex;

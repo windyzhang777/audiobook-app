@@ -3,6 +3,7 @@ import { getNowISOString, type BookContent, type SpeechOptions } from '@audioboo
 import { TTSNative, type TTSStatus } from './TTSNative';
 
 export interface SpeechConfigs extends Omit<BookContent, 'pagination'>, SpeechOptions {
+  totalLines: number;
   selectedVoice: VoiceOption;
 }
 
@@ -16,6 +17,7 @@ export class SpeechService {
 
   onLineEnd: ((lineIndex: number) => void) | null = null;
   onIsPlayingChange: ((isPlaying: boolean) => void) | null = null;
+  onLoadMoreLines: ((lineIndex: number) => void) | null = null;
   onBookCompleted: ((dateString: string) => void) | null = null;
 
   private constructor() {
@@ -36,12 +38,19 @@ export class SpeechService {
   }
 
   private play(index: number, configs: SpeechConfigs) {
-    if (!configs.bookId || !configs.lines || !configs.selectedVoice) return;
+    if (!configs.bookId || !configs.totalLines || !configs.selectedVoice) return;
 
     // Boundary Check
-    if (index < 0 || index >= configs.lines.length) {
+    if (index < 0 || index >= configs.totalLines) {
       this.onIsPlayingChange?.(false);
       this.onBookCompleted?.(getNowISOString());
+      return;
+    }
+
+    // Loading Check
+    if (index >= configs.lines.length) {
+      this.pause();
+      this.onLoadMoreLines?.(index);
       return;
     }
 
