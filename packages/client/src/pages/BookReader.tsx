@@ -89,13 +89,9 @@ export const BookReader = () => {
     if (isUserControl) {
       setReadingMode(mode);
     } else {
-      handleClearSearch(mode);
+      clearSearch();
+      setReadingMode(readingMode);
     }
-  };
-
-  const handleClearSearch = (readingMode: ReadingMode = 'focus') => {
-    clearSearch();
-    setReadingMode(readingMode);
   };
 
   const scrollToLine = useCallback((index: number, behavior: LocationOptions['behavior'] = 'smooth') => {
@@ -120,6 +116,7 @@ export const BookReader = () => {
     forceControl(false, 'focus');
     setCurrentLine(lineIndex);
     speechService.stop();
+    clearSearch();
   };
 
   const jumpToRead = (mode: ReadingMode = 'focus') => {
@@ -491,7 +488,8 @@ export const BookReader = () => {
                     }
                   }
                   if (e.key === 'Escape') {
-                    handleClearSearch();
+                    clearSearch();
+                    setReadingMode(readingMode);
                   }
                 }}
                 className="h-4 outline-none text-gray-600"
@@ -503,7 +501,8 @@ export const BookReader = () => {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleClearSearch();
+                    clearSearch();
+                    setReadingMode(readingMode);
                   }}
                   className="p-0! text-gray-600 transition-colors"
                   title="Clear search"
@@ -538,8 +537,12 @@ export const BookReader = () => {
       <div
         onMouseEnter={() => readingMode === 'focus' && forceControl(true, 'user')}
         onMouseLeave={() => isPlaying && readingMode === 'user' && forceControl(true, 'focus')}
-        className={`fixed bottom-0 left-0 h-[10vh] w-full bg-gray-50 border-t border-gray-200 flex justify-between items-center p-8 text-sm *:px-2 *:py-4 *:h-12 transition-transform duration-500 ease-in-out z-50 cursor-pointer ${readingMode === 'focus' ? 'translate-y-[calc(100%-10px)] opacity-50 grayscale' : 'translate-y-0 opacity-100 grayscale-0'}`}
+        className={`fixed bottom-0 left-0 h-[10vh] w-full bg-gray-50 border-t border-gray-200 flex justify-between items-center p-8 text-sm *:px-2 *:py-4 *:h-12 transition-transform duration-500 ease-in-out z-50 ${readingMode === 'focus' ? 'translate-y-[calc(100%-10px)] opacity-50 grayscale' : 'translate-y-0 opacity-100 grayscale-0'} *:hover:bg-amber-200 *:rounded-lg`}
       >
+        <span title={book.title} className="bg-transparent! flex items-center justify-center font-semibold text-wrap line-clamp-2 w-30 leading-tight">
+          {book.title}
+        </span>
+
         <span id="select-voice" className="relative p-0!" title="Select Voice">
           <label htmlFor="select-voice" className="absolute top-1/2 -translate-y-1/2 left-2 pointer-events-none">
             <UsersRound size={16} />
@@ -554,6 +557,7 @@ export const BookReader = () => {
               const found = availableVoices.find((voiceOption) => voiceOption.id === e.target.value);
               if (found) setSelectedVoice(found);
               speechService.stop();
+              e.target.blur();
             }}
             className="h-full min-w-30 pl-8 cursor-pointer text-center bg-transparent rounded-md"
           >
@@ -595,6 +599,7 @@ export const BookReader = () => {
               if (isPlaying) {
                 speechService.resume(currentLine, speechConfigs(newRate));
               }
+              e.target.blur();
             }}
             className="h-full min-w-30 pl-8 cursor-pointer text-center bg-transparent rounded-md"
           >
@@ -612,7 +617,7 @@ export const BookReader = () => {
           </label>
           <select
             id="select-bookmark"
-            value={bookmarks.find((b) => b.index === currentLine) ? currentLine : ''}
+            value=""
             onClick={() => {
               if (isPlaying) isUserFocusRef.current = true;
             }}
@@ -621,6 +626,7 @@ export const BookReader = () => {
               if (val !== '') {
                 jumpToIndex(parseInt(val));
                 forceControl(true, 'user');
+                e.target.blur();
               }
             }}
             className="h-full min-w-30 max-w-52 pl-8 cursor-pointer text-center bg-transparent rounded-md"
@@ -647,9 +653,9 @@ export const BookReader = () => {
         </button>
 
         {book && (
-          <span title={`Progress: Line ${currentLine} of ${totalLines}`} className="bg-transparent! text-gray-600 focus:ring-0! focus:outline-none!">
+          <h4 title={`Progress: Line ${currentLine} of ${totalLines}`} className="bg-transparent! text-gray-600 focus:ring-0! focus:outline-none!">
             Progress: {calculateProgress(currentLine, totalLines)}%
-          </span>
+          </h4>
         )}
       </div>
     </div>
