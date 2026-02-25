@@ -34,7 +34,7 @@ export interface Book {
   totalLines: number;
 
   createdAt: string; // ISO string
-  lastRead?: string; // ISO string
+  lastReadAt?: string; // ISO string
   updatedAt: string; // ISO string
   lastCompleted?: string; // ISO string
   bookmarks?: BookMark[];
@@ -59,6 +59,7 @@ export interface BookContentPagination {
 }
 
 export interface BookDto {
+  bookId: string;
   userId: string;
   title: string;
   source: BookSource;

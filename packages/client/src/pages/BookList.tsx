@@ -1,7 +1,7 @@
 import { UploadProgressDialog } from '@/components/UploadProgress';
 import { api } from '@/services/api';
 import { calculateProgress, formatLocaleDateString, type Book } from '@audiobook/shared';
-import { BookOpen, Loader, RotateCcw, Trash2, Upload } from 'lucide-react';
+import { BookOpen, Loader, RotateCcw, Trash2, Upload, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -12,12 +12,11 @@ export const BookList = () => {
   const [isEdit, setIsEdit] = useState(false);
   const [showCompleted, setShowCompleted] = useState(true);
   const [selectedBooks, setSelectedBooks] = useState<Book['id'][]>([]);
+  const [updatedBooks, setUpdatedBooks] = useState<Book['id'][]>([]);
 
   const canAction = isEdit && selectedBooks.length > 0;
   const booksCompleted = books.filter((book) => book.lastCompleted);
   const booksToRead = books.filter((book) => !book.lastCompleted);
-
-  const navigate = useNavigate();
 
   const loadBooks = async () => {
     try {
@@ -72,7 +71,21 @@ export const BookList = () => {
 
   const handleEditBooks = () => {
     setSelectedBooks([]);
-    setIsEdit((prev) => !prev);
+    setUpdatedBooks([]);
+    if (isEdit) {
+      // Update books with changed titles
+      const booksToUpdate = books.filter((book) => updatedBooks.includes(book.id));
+      Promise.all(booksToUpdate.map((book) => api.books.update(book.id, { title: book.title })))
+        .then(() => {
+          loadBooks();
+        })
+        .catch((error) => {
+          alert(error instanceof Error ? error.message : 'Failed to update book titles');
+        })
+        .finally(() => setIsEdit(false));
+    } else {
+      setIsEdit(true);
+    }
   };
 
   const closeEdit = useCallback(() => {
@@ -181,60 +194,24 @@ export const BookList = () => {
           </div>
         )}
         {booksToRead.length > 0 &&
-          booksToRead.map((book) => {
-            const progress = calculateProgress(book.currentLine, book.totalLines);
-            return (
-              <div
-                role="button"
-                tabIndex={0}
-                key={`book-${book.id}`}
-                aria-label={`Book ${book.id}`}
-                onClick={() => {
-                  if (isEdit) {
-                    setSelectedBooks((prev) => {
-                      if (prev.includes(book.id)) {
-                        return prev.filter((id) => id !== book.id);
-                      } else {
-                        return [...prev, book.id];
-                      }
-                    });
-                  } else {
-                    closeEdit();
-                    navigate(`/book/${book.id}`);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === ' ' || e.key === 'Enter') {
-                    e.preventDefault();
-                    if (isEdit) {
-                      setSelectedBooks((prev) => {
-                        if (prev.includes(book.id)) {
-                          return prev.filter((id) => id !== book.id);
-                        } else {
-                          return [...prev, book.id];
-                        }
-                      });
-                    } else {
-                      navigate(`/book/${book.id}`);
-                    }
-                  }
-                }}
-                className="flex flex-col justify-center items-center gap-4 bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer p-4"
-                style={{ backgroundColor: selectedBooks.includes(book.id) ? 'lightgray' : '' }}
-              >
-                <h3 className="font-medium w-full truncate">{book.title}</h3>
-                {book.lastRead ? (
-                  <div className="text-xs">Progress: {progress}%</div>
-                ) : (
-                  <div
-                    className={`${isEdit ? '' : 'shake-active'} bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 via-indigo-500 to-purple-500 bg-clip-text text-transparent text-xs font-extrabold`}
-                  >
-                    START READING!
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          booksToRead
+            .sort((a, b) => {
+              if (!a.lastReadAt) return 1;
+              if (!b.lastReadAt) return -1;
+              return b.lastReadAt.localeCompare(a.lastReadAt);
+            })
+            .map((book) => (
+              <BookItem
+                key={book.id}
+                book={book}
+                isEdit={isEdit}
+                selectedBooks={selectedBooks}
+                setSelectedBooks={setSelectedBooks}
+                closeEdit={closeEdit}
+                setBooks={setBooks}
+                setUpdatedBooks={setUpdatedBooks}
+              />
+            ))}
       </div>
 
       {/* Books Completed */}
@@ -257,51 +234,20 @@ export const BookList = () => {
             <div className="overflow-hidden">
               <div className="py-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {booksCompleted.length !== 0 &&
-                  booksCompleted.map((book) => {
-                    return (
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        key={`book-${book.id}`}
-                        aria-label={`Book ${book.id}`}
-                        onClick={() => {
-                          if (isEdit) {
-                            setSelectedBooks((prev) => {
-                              if (prev.includes(book.id)) {
-                                return prev.filter((id) => id !== book.id);
-                              } else {
-                                return [...prev, book.id];
-                              }
-                            });
-                          } else {
-                            closeEdit();
-                            navigate(`/book/${book.id}`);
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === ' ' || e.key === 'Enter') {
-                            e.preventDefault();
-                            if (isEdit) {
-                              setSelectedBooks((prev) => {
-                                if (prev.includes(book.id)) {
-                                  return prev.filter((id) => id !== book.id);
-                                } else {
-                                  return [...prev, book.id];
-                                }
-                              });
-                            } else {
-                              navigate(`/book/${book.id}`);
-                            }
-                          }
-                        }}
-                        className="flex flex-col justify-center items-center gap-4 bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer p-4"
-                        style={{ backgroundColor: selectedBooks.includes(book.id) ? 'lightgray' : '' }}
-                      >
-                        <h3 className="font-medium w-full truncate">{book.title}</h3>
-                        <div className="text-xs">Last Read: {formatLocaleDateString(new Date(book.lastRead!))}</div>
-                      </div>
-                    );
-                  })}
+                  booksCompleted
+                    .sort((a, b) => b.lastReadAt!.localeCompare(a.lastReadAt!))
+                    .map((book) => (
+                      <BookItem
+                        key={book.id}
+                        book={book}
+                        isEdit={isEdit}
+                        selectedBooks={selectedBooks}
+                        setSelectedBooks={setSelectedBooks}
+                        closeEdit={closeEdit}
+                        setBooks={setBooks}
+                        setUpdatedBooks={setUpdatedBooks}
+                      />
+                    ))}
               </div>
             </div>
           </div>
@@ -324,6 +270,101 @@ export const BookList = () => {
           }
         `}
       </style>
+    </div>
+  );
+};
+
+interface BookItemProps {
+  book: Book;
+  isEdit: boolean;
+  selectedBooks: Book['id'][];
+  setSelectedBooks: React.Dispatch<React.SetStateAction<Book['id'][]>>;
+  closeEdit: () => void;
+  setBooks: React.Dispatch<React.SetStateAction<Book[]>>;
+  setUpdatedBooks: React.Dispatch<React.SetStateAction<Book['id'][]>>;
+}
+
+export const BookItem = ({ book, isEdit, selectedBooks, setSelectedBooks, closeEdit, setBooks, setUpdatedBooks }: BookItemProps) => {
+  const navigate = useNavigate();
+  const progress = calculateProgress(book.currentLine, book.totalLines);
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      key={`book-${book.id}`}
+      aria-label={`Book ${book.id}`}
+      onClick={() => {
+        if (isEdit) {
+          setSelectedBooks((prev) => {
+            if (prev.includes(book.id)) {
+              return prev.filter((id) => id !== book.id);
+            } else {
+              return [...prev, book.id];
+            }
+          });
+        } else {
+          closeEdit();
+          navigate(`/book/${book.id}`);
+        }
+      }}
+      onKeyDown={(e) => {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          e.stopPropagation();
+
+          if (isEdit) {
+            setSelectedBooks((prev) => {
+              if (prev.includes(book.id)) {
+                return prev.filter((id) => id !== book.id);
+              } else {
+                return [...prev, book.id];
+              }
+            });
+          } else {
+            navigate(`/book/${book.id}`);
+          }
+        }
+      }}
+      className="flex flex-col justify-center items-center gap-4 bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer p-4"
+      style={{ backgroundColor: selectedBooks.includes(book.id) ? 'lightgray' : '' }}
+    >
+      {isEdit ? (
+        <input
+          type="text"
+          name="title"
+          defaultValue={book.title}
+          autoFocus
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => {
+            const newTitle = (e.target as HTMLInputElement).value.trim();
+            if (newTitle === book.title) return;
+            setUpdatedBooks((prev) => [...prev, book.id]);
+            setBooks((prev) => prev.map((b) => (b.id === book.id ? { ...b, title: newTitle } : b)));
+          }}
+          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring focus:border-blue-300 transition"
+        />
+      ) : (
+        <h3 className="font-medium w-full truncate">{book.title}</h3>
+      )}
+
+      {!isEdit ? (
+        book.lastCompleted ? (
+          <div className="text-xs">Last Read: {formatLocaleDateString(new Date(book.lastReadAt!))}</div>
+        ) : book.currentLine === 0 ? (
+          <div
+            className={`${isEdit ? '' : 'shake-active'} bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 via-indigo-500 to-purple-500 bg-clip-text text-transparent text-xs font-extrabold`}
+          >
+            START READING!
+          </div>
+        ) : (
+          <div className="text-xs">Progress: {progress}%</div>
+        )
+      ) : (
+        <div className="text-xs">Progress: {progress}%</div>
+      )}
+
+      {isEdit && <X size={16} />}
     </div>
   );
 };

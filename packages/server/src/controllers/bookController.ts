@@ -106,7 +106,7 @@ export class BookController {
     try {
       const updatedBook = this.bookService.update(req.params.id as string, {
         ...req.body,
-        lastRead: new Date().toISOString(),
+        lastReadAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
       res.json(updatedBook);
