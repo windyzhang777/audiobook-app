@@ -4,7 +4,7 @@ import { triggerSuccess } from '@/helper';
 import { api } from '@/services/api';
 import { speechService, type SpeechConfigs } from '@/services/SpeechService';
 import { calculateProgress, PAGE_SIZE, type Book, type BookContent, type BookMark, type SpeechOptions, type TextOptions } from '@audiobook/shared';
-import { ArrowLeft, AudioLines, Bookmark, BookmarkX, LibraryBig, Loader, Loader2, MapPin, Minus, Pause, Play, Plus, Search, UsersRound, X } from 'lucide-react';
+import { ArrowBigUp, ArrowLeft, AudioLines, Bookmark, BookmarkX, LibraryBig, Loader, Loader2, MapPin, Minus, Pause, Play, Plus, Search, UsersRound, X } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Virtuoso, type LocationOptions, type VirtuosoHandle } from 'react-virtuoso';
@@ -280,6 +280,7 @@ export const BookReader = () => {
       if (lineIndex == currentLine) return;
 
       forceControl(false, 'focus');
+      scrollToLine(currentLine, 'auto');
       setCurrentLine(lineIndex);
 
       if (isPlaying) {
@@ -316,7 +317,7 @@ export const BookReader = () => {
         ref={virtuosoRef}
         className="w-full leading-loose transition-transform duration-500 ease-in-out"
         style={{
-          minHeight: readingMode === 'focus' ? 'calc(100vh - 10px)' : '90vh',
+          minHeight: 'calc(100vh - 10px)',
           height: '50vh',
           maxHeight: '75%',
         }}
@@ -353,7 +354,7 @@ export const BookReader = () => {
               tabIndex={0}
               onWheel={() => forceControl(true, 'focus')}
               onTouchMove={() => forceControl(true, 'focus')}
-              className="outline-none list-none text-left px-12"
+              className="outline-none list-none text-left pl-14 pr-12"
               style={{ ...style, fontSize }}
             >
               {children}
@@ -401,19 +402,20 @@ export const BookReader = () => {
               role="button"
               tabIndex={index === currentLine ? 0 : -1}
               aria-current={index === currentLine ? 'location' : undefined}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                toggleBookmark(index, line);
-              }}
               onDoubleClick={() => handleLineClick(index)}
-              className={`relative cursor-pointer px-2 transition-colors duration-200 ease-in-out rounded-lg ${index === currentLine ? 'bg-amber-100 font-medium' : ''} focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-opacity-50 ${isBookmarked ? 'border border-r-4 border-amber-400 pr-2' : 'border-r-4 border-transparent'}`}
+              className={`group relative cursor-pointer my-1 px-2 transition-colors duration-200 ease-in-out rounded-lg ${index === currentLine ? 'bg-amber-100 font-medium' : 'hover:bg-gray-50'} focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-opacity-50 ${isBookmarked ? 'border border-r-4 border-amber-400 pr-2' : 'border-r-4 border-transparent'}`}
             >
               {searchText ? getHighlightedText(line, searchText) : line}
-              {isBookmarked && (
-                <span className="absolute -right-8 top-1/2 -translate-y-1/2 text-amber-400">
-                  <Bookmark size={16} fill="currentColor" />
-                </span>
-              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleBookmark(index, line);
+                }}
+                title={isBookmarked ? 'Remove Bookmark' : 'Add Bookmark'}
+                className={`absolute -right-8 top-0 text-amber-400 hover:opacity-100 transition-opacity duration-150 ${isBookmarked ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}`}
+              >
+                <Bookmark size={16} fill="currentColor" />
+              </button>
             </li>
           );
         }}
@@ -424,7 +426,7 @@ export const BookReader = () => {
         id="scrollbar-marker"
         className="absolute top-3 right-0.5 w-3 pointer-events-none z-10 transition-transform duration-500 ease-in-out"
         style={{
-          minHeight: readingMode === 'focus' ? 'calc(100vh - 10px - 1.5rem)' : '90vh',
+          minHeight: 'calc(100vh - 10px - 1.5rem)',
           height: 'calc(50vh - 1.5rem)',
           maxHeight: 'calc(75% - 1.5rem)',
         }}
@@ -449,20 +451,161 @@ export const BookReader = () => {
         <span className="font-semibold text-xl">{speechRate}x</span>
       </div>
 
-      {/* Side Panel */}
+      {/* Control Panel */}
       <div
-        id="side-panel"
-        className="fixed bottom-25 left-2 h-auto text-sm text-gray-400 flex flex-col items-start gap-1 rounded-md bg-transparent z-10 [&>button]:flex [&>button]:items-center [&>button]:py-1 [&>button]:bg-transparent [&>button]:hover:bg-amber-200 [&>button]:hover:text-gray-600"
+        id="control-panel"
+        className="fixed bottom-10 left-2 h-auto text-sm text-gray-400 flex flex-col items-start gap-1 rounded-full bg-transparent z-10 *:flex *:items-center [&>button]:ml-1! [&>button]:bg-transparent [&>button]:hover:bg-amber-200 [&>button]:hover:text-gray-600 [&>button]:rounded-full! select-none"
       >
-        {/* Jump to read button */}
-        <button id="jump-to-read" title="Jump to read" onClick={() => jumpToRead('focus')} className={showJumpButton ? 'text-gray-600!' : 'text-inherit'}>
-          <MapPin size={16} />
-        </button>
+        <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent [&>button]:hover:bg-amber-200 [&>button]:hover:text-gray-600 *:rounded-full!">
+          <button id="jump-to-top" title="Jump To Top" onClick={() => jumpToIndex(0)} className={showJumpButton ? 'text-gray-600!' : 'text-inherit'}>
+            <ArrowBigUp size={16} />
+          </button>
+
+          {/* Jump to read button */}
+          <button id="jump-to-read" title="Jump To Read" onClick={() => jumpToRead('focus')} className={showJumpButton ? 'text-gray-600!' : 'text-inherit'}>
+            <MapPin size={16} />
+          </button>
+        </div>
 
         {/* Play/Pause */}
         <button id={isPlaying ? 'pause' : 'play'} onClick={handlePlayPause} title={isPlaying ? 'Pause' : 'Play'} className={isPlaying ? 'text-gray-600' : 'text-green-600'}>
           {isPlaying ? <Pause size={16} /> : <Play size={16} />}
         </button>
+
+        {/* Text Size */}
+        <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent [&>button]:hover:bg-amber-200 [&>button]:hover:text-gray-600 *:rounded-full!">
+          <button id="text-size-up" onClick={() => setFontSize(fontSize + 1)} title="Text Size Up">
+            <Plus size={16} />
+          </button>
+          <span title="Text Size" className="h-8 w-8 pl-2 text-xs bg-transparent! cursor-default">
+            {fontSize}
+          </span>
+          <button id="text-size-down" onClick={() => setFontSize(fontSize - 1)} title="Text Size Down">
+            <Minus size={16} />
+          </button>
+        </div>
+
+        <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent *:hover:bg-amber-200 *:hover:text-gray-600 *:rounded-full!">
+          {/* Select Voice */}
+          <span title="Select Voice" className="relative h-8 w-8 px-1">
+            <label htmlFor="select-voice" className="absolute top-1/2 -translate-y-1/2 left-2 pointer-events-none">
+              <UsersRound size={16} />
+            </label>
+            <select
+              id="select-voice"
+              value={selectedVoice.id}
+              onClick={() => {
+                if (isPlaying) isUserFocusRef.current = true;
+              }}
+              onChange={(e) => {
+                const found = availableVoices.find((voiceOption) => voiceOption.id === e.target.value);
+                if (found) setSelectedVoice(found);
+                speechService.stop();
+                e.target.blur();
+              }}
+              className="cursor-pointer text-center text-transparent bg-transparent py-1 w-6!"
+            >
+              <option value="" disabled>
+                Speech Voices
+              </option>
+              {availableVoices.map((voice) => (
+                <option
+                  key={`voice-${voice.id}`}
+                  value={voice.id}
+                  style={{
+                    backgroundColor: voice.enabled ? '#fff' : 'gray',
+                  }}
+                >
+                  {voice.displayName}
+                </option>
+              ))}
+            </select>
+          </span>
+
+          {/* Select Speech Rate */}
+          <span title="Speech Rate" className="relative h-8 w-8 px-1">
+            <label htmlFor="select-rate" className="absolute top-1/2 -translate-y-1/2 left-2 pointer-events-none">
+              <AudioLines size={16} />
+            </label>
+            <select
+              id="select-rate"
+              value={speechRate}
+              onClick={() => {
+                if (isPlaying) isUserFocusRef.current = true;
+              }}
+              onChange={(e) => {
+                const newRate = parseFloat(e.target.value);
+                setSpeechRate(newRate);
+
+                // Rate Indicator (Debounced)
+                if (timerRef.current) clearTimeout(timerRef.current);
+                setShowRateIndicator(true);
+                timerRef.current = setTimeout(() => {
+                  setShowRateIndicator(false);
+                }, 1200);
+
+                if (isPlaying) {
+                  speechService.resume(currentLine, speechConfigs(newRate));
+                }
+                e.target.blur();
+              }}
+              className="cursor-pointer text-center text-transparent bg-transparent py-1 w-6!"
+            >
+              <option value="" disabled>
+                Speech Rates
+              </option>
+              {SPEECH_RATE_OPTIONS.map((rate) => (
+                <option key={`rate-${rate}`} value={rate}>
+                  {rate}x
+                </option>
+              ))}
+            </select>
+          </span>
+
+          {/* Select Bookmark */}
+          <span title="Bookmarks" className="relative h-8 w-8 px-1">
+            <label htmlFor="select-bookmark" className="absolute top-1/2 -translate-y-1/2 left-2 pointer-events-none">
+              <Bookmark size={16} />
+            </label>
+            <select
+              id="select-bookmark"
+              value=""
+              onClick={() => {
+                if (isPlaying) isUserFocusRef.current = true;
+              }}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val !== '') {
+                  jumpToIndex(parseInt(val));
+                  forceControl(true, 'user');
+                  e.target.blur();
+                }
+              }}
+              className="cursor-pointer text-center text-transparent bg-transparent py-1 w-6!"
+            >
+              <option value="" disabled>
+                {bookmarks.length > 0 ? 'Bookmarks' : 'No Bookmarks'}
+              </option>
+              {bookmarks.map((bookmark) => (
+                <option key={`bookmark-${bookmark.index}`} value={bookmark.index} className="text-ellipsis">
+                  Line {bookmark.index + 1}: {bookmark.text}
+                </option>
+              ))}
+            </select>
+          </span>
+
+          {/* Clear Bookmarks */}
+          <button
+            disabled={bookmarks.length === 0}
+            onClick={() => {
+              if (!confirm('Deleted all bookmarks?')) return;
+              setBookmarks([]);
+            }}
+            title="Remove all bookmarks"
+          >
+            <BookmarkX size={16} />
+          </button>
+        </div>
 
         {/* Search text */}
         <button id="search" onClick={() => searchInputRef.current?.focus()} title="Search text" className={searchText.length > 0 ? 'bg-amber-200! shadow-md' : 'bg-inherit gap-0!'}>
@@ -519,144 +662,14 @@ export const BookReader = () => {
           )}
         </button>
 
-        {/* Text Size */}
-        <button id="text-size-up" onClick={() => setFontSize(fontSize + 1)} title="Text Size Up">
-          <Plus size={16} />
-        </button>
-        <button id="text-size-down" onClick={() => setFontSize(fontSize - 1)} title="Text Size Down">
-          <Minus size={16} />
-        </button>
+        <span title={`Progress: Line ${currentLine} of ${totalLines}`} className="h-8 w-8 ml-2 text-xs bg-transparent! cursor-default">
+          {calculateProgress(currentLine, totalLines)}%
+        </span>
 
         {/* Nav back to books */}
         <button id="back-to-books" onClick={() => navigateBack()} title="Back to Books">
           <LibraryBig size={16} />
         </button>
-      </div>
-
-      {/* Controller Panel */}
-      <div
-        onMouseEnter={() => readingMode === 'focus' && forceControl(true, 'user')}
-        onMouseLeave={() => isPlaying && readingMode === 'user' && forceControl(true, 'focus')}
-        className={`fixed bottom-0 left-0 h-[10vh] w-full bg-gray-50 border-t border-gray-200 flex justify-between items-center p-8 text-sm *:px-2 *:py-4 *:h-12 transition-transform duration-500 ease-in-out z-50 ${readingMode === 'focus' ? 'translate-y-[calc(100%-10px)] opacity-50 grayscale' : 'translate-y-0 opacity-100 grayscale-0'} *:hover:bg-amber-200 *:rounded-lg`}
-      >
-        <span title={book.title} className="bg-transparent! flex items-center justify-center font-semibold text-wrap line-clamp-2 w-30 leading-tight">
-          {book.title}
-        </span>
-
-        <span id="select-voice" className="relative p-0!" title="Select Voice">
-          <label htmlFor="select-voice" className="absolute top-1/2 -translate-y-1/2 left-2 pointer-events-none">
-            <UsersRound size={16} />
-          </label>
-          <select
-            id="select-voice"
-            value={selectedVoice.id}
-            onClick={() => {
-              if (isPlaying) isUserFocusRef.current = true;
-            }}
-            onChange={(e) => {
-              const found = availableVoices.find((voiceOption) => voiceOption.id === e.target.value);
-              if (found) setSelectedVoice(found);
-              speechService.stop();
-              e.target.blur();
-            }}
-            className="h-full min-w-30 pl-8 cursor-pointer text-center bg-transparent rounded-md"
-          >
-            {availableVoices.map((voice) => (
-              <option
-                key={`voice-${voice.id}`}
-                value={voice.id}
-                style={{
-                  backgroundColor: voice.enabled ? '#fff' : 'gray',
-                }}
-              >
-                {voice.displayName}
-              </option>
-            ))}
-          </select>
-        </span>
-
-        <span id="select-rate" className="relative p-0!" title="Speech Rate">
-          <label htmlFor="select-rate" className="absolute top-1/2 -translate-y-1/2 left-2 pointer-events-none">
-            <AudioLines size={16} />
-          </label>
-          <select
-            id="select-rate"
-            value={speechRate}
-            onClick={() => {
-              if (isPlaying) isUserFocusRef.current = true;
-            }}
-            onChange={(e) => {
-              const newRate = parseFloat(e.target.value);
-              setSpeechRate(newRate);
-
-              // Rate Indicator (Debounced)
-              if (timerRef.current) clearTimeout(timerRef.current);
-              setShowRateIndicator(true);
-              timerRef.current = setTimeout(() => {
-                setShowRateIndicator(false);
-              }, 1200);
-
-              if (isPlaying) {
-                speechService.resume(currentLine, speechConfigs(newRate));
-              }
-              e.target.blur();
-            }}
-            className="h-full min-w-30 pl-8 cursor-pointer text-center bg-transparent rounded-md"
-          >
-            {SPEECH_RATE_OPTIONS.map((rate) => (
-              <option key={`rate-${rate}`} value={rate}>
-                {rate}x
-              </option>
-            ))}
-          </select>
-        </span>
-
-        <span id="select-bookmark" className="relative p-0!" title="Right-click a line to add/remove bookmark">
-          <label htmlFor="select-bookmark" className="absolute top-1/2 -translate-y-1/2 left-2 pointer-events-none">
-            <Bookmark size={16} />
-          </label>
-          <select
-            id="select-bookmark"
-            value=""
-            onClick={() => {
-              if (isPlaying) isUserFocusRef.current = true;
-            }}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val !== '') {
-                jumpToIndex(parseInt(val));
-                forceControl(true, 'user');
-                e.target.blur();
-              }
-            }}
-            className="h-full min-w-30 max-w-52 pl-8 cursor-pointer text-center bg-transparent rounded-md"
-          >
-            <option value="" disabled>
-              {bookmarks.length > 0 ? 'Jump to Bookmark...' : 'No Bookmarks'}
-            </option>
-            {bookmarks.map((bookmark) => (
-              <option key={`bookmark-${bookmark.index}`} value={bookmark.index} className="text-ellipsis">
-                Line {bookmark.index + 1}: {bookmark.text}
-              </option>
-            ))}
-          </select>
-        </span>
-
-        <button
-          onClick={() => {
-            if (!confirm('Deleted all bookmarks?')) return;
-            setBookmarks([]);
-          }}
-          title="Remove all bookmarks"
-        >
-          <BookmarkX size={16} />
-        </button>
-
-        {book && (
-          <h4 title={`Progress: Line ${currentLine} of ${totalLines}`} className="bg-transparent! text-gray-600 focus:ring-0! focus:outline-none!">
-            Progress: {calculateProgress(currentLine, totalLines)}%
-          </h4>
-        )}
       </div>
     </div>
   );
