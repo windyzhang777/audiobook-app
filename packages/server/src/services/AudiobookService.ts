@@ -1,8 +1,8 @@
-import { uploadsDir } from '@/index';
-import { BookRepository } from '@/repositories/book';
 import { createWriteStream } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
+import { uploadsDir } from '../index';
+import { BookRepository } from '../repositories/book';
 import { TTSGoogle } from './TTSService';
 
 export class AudiobookService {

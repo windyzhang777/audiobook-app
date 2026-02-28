@@ -3,10 +3,13 @@
   "compilerOptions": {
     "module": "commonjs",
     "moduleResolution": "node",
+    "composite": true,
+    "noEmit": false,
     "rootDir": "./src",
     "outDir": "./dist",
     "types": ["node"],
-    "paths": { "@/*": ["./src/*"], "@audiobook/shared": ["../shared/src"] }
+    "paths": { "@/*": ["./src/*", "../shared/src/*"], "@audiobook/shared": ["../shared/src"] },
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"],

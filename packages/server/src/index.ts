@@ -1,5 +1,3 @@
-import { bookRoutes } from '@/routes/bookRoutes';
-import { uploadRoutes } from '@/routes/uploadRoutes';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express, { NextFunction, Request, Response } from 'express';
@@ -7,6 +5,8 @@ import path from 'path';
 import { BookController } from './controllers/bookController';
 import { UploadController } from './controllers/uploadController';
 import { BookRepository } from './repositories/book';
+import { bookRoutes } from './routes/bookRoutes';
+import { uploadRoutes } from './routes/uploadRoutes';
 import { AudiobookService } from './services/AudiobookService';
 import { BookService } from './services/bookService';
 import { TextProcessorService } from './services/textProcessorService';
@@ -58,7 +58,11 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
+export default app;
+
 // Start server
-app.listen(PORT, () => {
-  console.log(`Audiobook server is running on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`Audiobook server is running on http://localhost:${PORT}`);
+  });
+}

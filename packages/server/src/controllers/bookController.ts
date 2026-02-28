@@ -1,8 +1,8 @@
-import { AudiobookService } from '@/services/AudiobookService';
-import { BookService } from '@/services/bookService';
 import { fixEncoding, PAGE_SIZE } from '@audiobook/shared';
 import { Request, Response } from 'express';
 import path from 'path';
+import { AudiobookService } from '../services/AudiobookService';
+import { BookService } from '../services/bookService';
 
 export class BookController {
   constructor(

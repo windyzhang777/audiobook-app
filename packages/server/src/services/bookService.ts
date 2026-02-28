@@ -1,8 +1,8 @@
-import { uploadsDir } from '@/index';
-import { BookRepository } from '@/repositories/book';
 import { Book, BookContent, BookFileType } from '@audiobook/shared';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
+import { uploadsDir } from '../index';
+import { BookRepository } from '../repositories/book';
 import { TextProcessorService } from './textProcessorService';
 
 export class BookService {

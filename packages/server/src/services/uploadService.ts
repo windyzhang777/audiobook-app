@@ -1,9 +1,9 @@
-import { uploadsDir } from '@/index';
 import { ONE_DAY, ONE_HOUR } from '@audiobook/shared';
 import { createWriteStream } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { uploadsDir } from '../index';
 
 interface UploadSession {
   id: string;

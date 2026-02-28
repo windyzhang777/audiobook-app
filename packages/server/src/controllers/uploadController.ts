@@ -1,7 +1,7 @@
-import { BookService } from '@/services/bookService';
-import { UploadService } from '@/services/uploadService';
 import { getFileTitle } from '@audiobook/shared';
 import { Request, Response } from 'express';
+import { BookService } from '../services/bookService';
+import { UploadService } from '../services/uploadService';
 
 export class UploadController {
   constructor(

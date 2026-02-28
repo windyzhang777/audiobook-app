@@ -1,10 +1,10 @@
-import { BookController } from '@/controllers/bookController';
-import { uploadsDir } from '@/index';
 import { isValidFileType } from '@audiobook/shared';
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { BookController } from '../controllers/bookController';
+import { uploadsDir } from '../index';
 
 /**
  * Multer upload configuration
