@@ -7,25 +7,29 @@
     "packages/*"
   ],
   "scripts": {
-    "install:all": "npm install && npm install --workspaces",
-    "dev": "npm run build:shared && concurrently \"npm run dev:client\" \"npm run dev:server\" \"npm run dev:shared\"",
-    "dev:client": "npm run dev -w @audiobook/client",
+    "postinstall": "npm run build:shared",
+    "dev": "npm run build:shared && concurrently \"npm run dev:web\" \"npm run dev:server\" \"npm run dev:shared\"",
+    "dev:web": "npm run dev -w @audiobook/web",
     "dev:server": "npm run dev -w @audiobook/server",
     "dev:shared": "npm run dev -w @audiobook/shared",
     "build": "npm run build --workspaces --if-present",
-    "build:client": "npm run build -w @audiobook/client",
+    "build:web": "npm run build -w @audiobook/web",
     "build:server": "npm run build -w @audiobook/server",
     "build:shared": "npm run build -w @audiobook/shared",
     "lint": "npm run lint --workspaces --if-present",
-    "format": "prettier --write \"packages/**/*.{ts,tsx,js,jsx}\""
+    "format": "prettier --write \"packages/**/*.{ts,tsx,js,jsx}\"",
+    "deploy:web": "npm run build:shared && npm run build:web",
+    "deploy:server": "npm run build:shared && npm run build:server",
+    "nuclear": "rm -rf node_modules package-lock.json packages/*/node_modules packages/*/dist packages/*/*.tsbuildinfo"
   },
   "author": "zhwind",
   "devDependencies": {
+    "@tailwindcss/oxide": "^4.2.1",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
+    "concurrently": "^8.2.2",
     "eslint": "^8.56.0",
     "prettier": "^3.2.5",
-    "typescript": "^5.3.3",
-    "concurrently": "^8.2.2"
+    "typescript": "^5.3.3"
   }
 }

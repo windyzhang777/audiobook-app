@@ -36,7 +36,7 @@ export const BookReader = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showJumpButton, setShowJumpButton] = useState(false);
-  const [readingMode, setReadingMode] = useState<ReadingMode>('user');
+  const [readingMode, setReadingMode] = useState<ReadingMode>('focus');
   const [error, setError] = useState<string>();
   const [showRateIndicator, setShowRateIndicator] = useState(false);
   const [currentLine, setCurrentLine] = useState<Book['currentLine']>(0);
@@ -63,6 +63,7 @@ export const BookReader = () => {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const isSearchJumping = useRef(false);
   const shouldResumeRef = useRef(false);
+  const isFetchingRef = useRef(false);
 
   const speechConfigs = useCallback(
     (rate: number = speechRate): SpeechConfigs => ({ bookId: id || '', lines, lang, rate, totalLines, selectedVoice }),
@@ -149,13 +150,15 @@ export const BookReader = () => {
 
   const loadMoreLines = useCallback(
     async (offset: number = 0, limit: number = PAGE_SIZE) => {
-      if (!hasMore || !id || loadingMore) return;
+      if (!hasMore || !id || loadingMore || isFetchingRef.current) return;
 
+      isFetchingRef.current = true;
       setLoadingMore(true);
       try {
         await loadBookContent(id, offset, limit);
       } finally {
         setLoadingMore(false);
+        isFetchingRef.current = false;
       }
     },
     [hasMore, id, loadingMore],
@@ -324,8 +327,9 @@ export const BookReader = () => {
         data={lines}
         initialTopMostItemIndex={{ index: 0, align: 'center' }}
         increaseViewportBy={200}
-        endReached={() => {
+        endReached={(index) => {
           if (!hasMore || loadingMore || isSearchJumping.current) return;
+          if (index < lines.length - 1) return;
           loadMoreLines(lines.length);
         }}
         atBottomStateChange={(atBottom) => {
@@ -354,7 +358,7 @@ export const BookReader = () => {
               tabIndex={0}
               onWheel={() => forceControl(true, 'focus')}
               onTouchMove={() => forceControl(true, 'focus')}
-              className="outline-none list-none text-left pl-14 pr-12"
+              className="outline-none list-none text-left pl-14 pr-11"
               style={{ ...style, fontSize }}
             >
               {children}
@@ -402,17 +406,22 @@ export const BookReader = () => {
               role="button"
               tabIndex={index === currentLine ? 0 : -1}
               aria-current={index === currentLine ? 'location' : undefined}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                toggleBookmark(index, line);
+              }}
               onDoubleClick={() => handleLineClick(index)}
               className={`group relative cursor-pointer my-1 px-2 transition-colors duration-200 ease-in-out rounded-lg ${index === currentLine ? 'bg-amber-100 font-medium' : 'hover:bg-gray-50'} focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-opacity-50 ${isBookmarked ? 'border border-r-4 border-amber-400 pr-2' : 'border-r-4 border-transparent'}`}
             >
               {searchText ? getHighlightedText(line, searchText) : line}
               <button
+                aria-label={`${isBookmarked ? 'Remove' : 'Add'} bookmark for line ${index + 1}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   toggleBookmark(index, line);
                 }}
                 title={isBookmarked ? 'Remove Bookmark' : 'Add Bookmark'}
-                className={`absolute -right-8 top-0 text-amber-400 hover:opacity-100 transition-opacity duration-150 ${isBookmarked ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}`}
+                className={`absolute -right-9 top-0 text-amber-400 hover:opacity-100 transition-opacity duration-150 ${isBookmarked ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}`}
               >
                 <Bookmark size={16} fill="currentColor" />
               </button>
@@ -454,10 +463,19 @@ export const BookReader = () => {
       {/* Control Panel */}
       <div
         id="control-panel"
-        className="fixed bottom-10 left-2 h-auto text-sm text-gray-400 flex flex-col items-start gap-1 rounded-full bg-transparent z-10 *:flex *:items-center [&>button]:ml-1! [&>button]:bg-transparent [&>button]:hover:bg-amber-200 [&>button]:hover:text-gray-600 [&>button]:rounded-full! select-none"
+        className="fixed top-1/2 -translate-y-1/2 left-2 h-auto text-sm text-gray-400 flex flex-col items-start gap-1 rounded-full bg-transparent z-10 *:flex *:items-center [&>button]:ml-1! [&>button]:bg-transparent [&>button]:hover:bg-amber-200 [&>button]:hover:text-gray-600 [&>button]:rounded-full! select-none"
       >
         <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent [&>button]:hover:bg-amber-200 [&>button]:hover:text-gray-600 *:rounded-full!">
-          <button id="jump-to-top" title="Jump To Top" onClick={() => jumpToIndex(0)} className={showJumpButton ? 'text-gray-600!' : 'text-inherit'}>
+          {/* Jump to start */}
+          <button
+            id="jump-to-top"
+            title="Jump To Top"
+            onClick={() => {
+              jumpToIndex(0);
+              forceControl(true, 'user');
+            }}
+            className={showJumpButton ? 'text-gray-600!' : 'text-inherit'}
+          >
             <ArrowBigUp size={16} />
           </button>
 
@@ -477,7 +495,7 @@ export const BookReader = () => {
           <button id="text-size-up" onClick={() => setFontSize(fontSize + 1)} title="Text Size Up">
             <Plus size={16} />
           </button>
-          <span title="Text Size" className="h-8 w-8 pl-2 text-xs bg-transparent! cursor-default">
+          <span title="Text Size" className="h-8 w-8 pl-2 text-xs bg-transparent! text-gray-600 cursor-default">
             {fontSize}
           </span>
           <button id="text-size-down" onClick={() => setFontSize(fontSize - 1)} title="Text Size Down">
@@ -608,7 +626,15 @@ export const BookReader = () => {
         </div>
 
         {/* Search text */}
-        <button id="search" onClick={() => searchInputRef.current?.focus()} title="Search text" className={searchText.length > 0 ? 'bg-amber-200! shadow-md' : 'bg-inherit gap-0!'}>
+        <button
+          id="search"
+          onClick={() => {
+            searchInputRef.current?.focus();
+            forceControl(true, 'user');
+          }}
+          title="Search text"
+          className={searchText.length > 0 ? 'bg-amber-200! shadow-md' : 'bg-inherit gap-0!'}
+        >
           <Search size={16} className={readingMode === 'user' ? 'text-gray-600' : 'text-inherit'} />
           {readingMode === 'user' && (
             <>
@@ -662,7 +688,7 @@ export const BookReader = () => {
           )}
         </button>
 
-        <span title={`Progress: Line ${currentLine} of ${totalLines}`} className="h-8 w-8 ml-2 text-xs bg-transparent! cursor-default">
+        <span title={`Progress: Line ${currentLine} of ${totalLines}`} className="h-8 w-8 ml-2 text-xs text-gray-600 bg-transparent! cursor-default">
           {calculateProgress(currentLine, totalLines)}%
         </span>
 

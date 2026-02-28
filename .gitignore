@@ -40,6 +40,5 @@ yarn-error.*
 
 # local
 .env
-*.json
 local.*
 packages/server/uploads

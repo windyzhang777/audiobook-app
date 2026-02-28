@@ -1,4 +1,4 @@
-import { BookFileType } from '@/types';
+import type { BookFileType } from './types';
 
 // \p{L} matches any letter from any language
 // \p{N} matches any kind of numeric character

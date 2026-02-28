@@ -20,21 +20,21 @@ export function useUpdateBook(id: string | undefined, updatedBook: Partial<Book>
     if (canUpdate) {
       debounceUpdate();
     }
-  }, [debounceUpdate, canUpdate]);
+  }, [debounceUpdate, canUpdate, updatedBook]);
 
   useEffect(() => {
-    const handlePageVisibility = () => {
-      if (document.visibilityState === 'hidden') {
-        flushUpdate();
-      }
+    const handlePageExit = () => {
+      flushUpdate();
     };
 
-    document.addEventListener('visibilitychange', handlePageVisibility);
-    window.addEventListener('pagehide', handlePageVisibility);
+    document.addEventListener('visibilitychange', handlePageExit);
+    window.addEventListener('beforeunload', handlePageExit);
+    window.addEventListener('pagehide', handlePageExit);
 
     return () => {
-      document.removeEventListener('visibilitychange', handlePageVisibility);
-      window.removeEventListener('pagehide', handlePageVisibility);
+      document.removeEventListener('visibilitychange', handlePageExit);
+      window.removeEventListener('beforeunload', handlePageExit);
+      window.removeEventListener('pagehide', handlePageExit);
       flushUpdate();
     };
   }, [flushUpdate]);

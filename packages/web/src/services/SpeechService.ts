@@ -1,6 +1,6 @@
 import type { VoiceOption } from '@/pages/BookReader';
 import { getNowISOString, type BookContent, type SpeechOptions } from '@audiobook/shared';
-import { TTSNative, type TTSStatus } from './TTSNative';
+import { TTSNative } from './TTSNative';
 
 export interface SpeechConfigs extends Omit<BookContent, 'pagination'>, SpeechOptions {
   totalLines: number;
@@ -11,9 +11,10 @@ export class SpeechService {
   private static instance: SpeechService;
   private ttsNative = new TTSNative();
   private silentAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
-  private cloudAudio: HTMLAudioElement | null = null;
+  private cloudAudio: HTMLAudioElement = new Audio();
   private isRestarting: boolean = false;
   private timer: NodeJS.Timeout | null = null;
+  private currentBookId: string | null = null;
 
   onLineEnd: ((lineIndex: number) => void) | null = null;
   onIsPlayingChange: ((isPlaying: boolean) => void) | null = null;
@@ -23,6 +24,7 @@ export class SpeechService {
   private constructor() {
     this.silentAudio.loop = true;
     this.silentAudio.volume = 0.001;
+    this.cloudAudio.onerror = () => this.onIsPlayingChange?.(false);
   }
 
   static getInstance() {
@@ -76,13 +78,7 @@ export class SpeechService {
   private startCloudSpeech(index: number, configs: SpeechConfigs) {
     const cloudSrc = `/api/books/${configs.bookId}/audio/${index}?voice=${configs.selectedVoice.id}`;
 
-    if (!this.cloudAudio) {
-      this.cloudAudio = new Audio();
-      this.cloudAudio.onerror = () => {
-        this.onIsPlayingChange?.(false);
-      };
-    }
-
+    this.cloudAudio.pause();
     this.cloudAudio.src = cloudSrc;
     this.cloudAudio.playbackRate = configs.rate || 1.0;
 
@@ -91,7 +87,15 @@ export class SpeechService {
       this.onLineEnd?.(next);
       this.start(next, configs);
     };
-    this.cloudAudio.play().catch(console.error);
+
+    this.cloudAudio.play().catch((e) => {
+      // Check if it was interrupted by a new request (common when skipping lines)
+      if (e.name !== 'AbortError') {
+        console.error('Cloud playback error:', e);
+      } else {
+        console.log('Cloud playback was interrupted by a new request');
+      }
+    });
   }
 
   private startSystemSpeech = (index: number, configs: SpeechConfigs) => {
@@ -136,15 +140,17 @@ export class SpeechService {
   }
 
   private stopCloud() {
-    if (!this.cloudAudio) return;
-
     this.cloudAudio.pause();
     this.cloudAudio.onended = null;
-    this.cloudAudio.src = '';
-    this.cloudAudio = null;
+
+    // Unloads the audio resource without destroying the object
+    this.cloudAudio.removeAttribute('src');
+    this.cloudAudio.load();
   }
 
   resume(index: number, configs: SpeechConfigs) {
+    if (this.timer) clearTimeout(this.timer);
+
     // pause
     this.pause();
 
@@ -163,14 +169,34 @@ export class SpeechService {
   private setupMediaSession(index: number, configs: SpeechConfigs) {
     if (!('mediaSession' in navigator)) return;
 
-    // TODO: Set Metadata (Shows Book Title/Author on Lock Screen - Crucial for iOS/macOS stability)
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: 'Audiobook',
-      artist: 'Reading...',
-      album: 'My Library',
-      // artwork: [{ src: 'icon.png', sizes: '512x512', type: 'image/png' }],
-    });
+    if (this.currentBookId !== configs.bookId) {
+      this.currentBookId = configs.bookId;
 
+      // TODO: Set Metadata (Shows Book Title/Author on Lock Screen - Crucial for iOS/macOS stability)
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: 'Audiobook',
+        artist: 'Reading...',
+        album: 'My Library',
+        // artwork: [{ src: 'icon.png', sizes: '512x512', type: 'image/png' }],
+      });
+    }
+
+    if ('setPositionState' in navigator.mediaSession) {
+      try {
+        navigator.mediaSession.setPositionState({
+          duration: configs.totalLines,
+          playbackRate: configs.rate || 1.0,
+          position: index,
+        });
+      } catch (e) {
+        console.error('Error updating position state:', e);
+      }
+    }
+
+    this.updateActionHandlers(index, configs);
+  }
+
+  private updateActionHandlers(index: number, configs: SpeechConfigs) {
     // Set the Play/Pause handlers (AirPod Taps)
     navigator.mediaSession.setActionHandler('play', () => this.start(index, configs));
     navigator.mediaSession.setActionHandler('pause', () => this.pause());
@@ -192,19 +218,6 @@ export class SpeechService {
   private clearMediaSession() {
     const actions: MediaSessionAction[] = ['play', 'pause', 'nexttrack', 'previoustrack'] as const;
     actions.forEach((action) => navigator.mediaSession.setActionHandler(action, null));
-  }
-
-  public getStatus(): TTSStatus | 'playing' {
-    if (this.cloudAudio) {
-      if (this.cloudAudio.paused) return 'paused';
-      if (this.cloudAudio.src) return 'playing';
-    }
-
-    const systemStatus = this.ttsNative.getStatus();
-    if (systemStatus === 'speaking') return 'playing';
-    if (systemStatus === 'paused') return 'paused';
-
-    return 'idle';
   }
 }
 

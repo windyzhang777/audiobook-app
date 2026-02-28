@@ -24,7 +24,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
 
-    "paths": { "@/*": ["./src/*"], "@audiobook/shared": ["../shared/src"] }
+    "paths": { "@/*": ["./src/*", "../shared/src/*"], "@audiobook/shared": ["../shared/src"] }
   },
   "include": ["src", "vite.config.ts"]
 }

@@ -23,21 +23,21 @@ A scalable, full-stack audiobook application built with Node.js, React 19, and T
 2. Install all dependencies:
 
 ```bash
-npm run install:all
+npm run install
 ```
 
 This will install dependencies in the root and all workspace packages.
 
 ### Development
 
-Start both client and server in development mode:
+Start both web and server in development mode:
 
 ```bash
 # Start everything
 npm run dev
 
 # Or start individually
-npm run dev:client  # Client on http://localhost:3000
+npm run dev:web  # Web on http://localhost:3000
 npm run dev:server  # Server on http://localhost:3001
 ```
 
@@ -54,7 +54,7 @@ Build individually:
 ```bash
 npm run build:shared
 npm run build:server
-npm run build:client
+npm run build:web
 ```
 
 ### Code Quality
