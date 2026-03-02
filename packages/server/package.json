@@ -1,7 +1,7 @@
 {
   "name": "@audiobook/server",
   "version": "1.0.0",
-  "description": "Audiobook-web server",
+  "description": "audiobook-app server",
   "main": "dist/index.js",
   "scripts": {
     "dev": "NODE_ENV=development tsx watch src/index.ts",
