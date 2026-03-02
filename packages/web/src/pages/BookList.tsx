@@ -69,7 +69,7 @@ export const BookList = () => {
     }
   };
 
-  const handleEditBooks = () => {
+  const handleEditBooks = useCallback(() => {
     setSelectedBooks([]);
     setUpdatedBooks([]);
     if (isEdit) {
@@ -86,11 +86,14 @@ export const BookList = () => {
     } else {
       setIsEdit(true);
     }
-  };
+  }, [isEdit, books, updatedBooks]);
 
   const closeEdit = useCallback(() => {
     setSelectedBooks([]);
-    if (isEdit) setIsEdit(false);
+    if (isEdit) {
+      setIsEdit(false);
+      loadBooks();
+    }
   }, [isEdit]);
 
   useEffect(() => {
@@ -119,7 +122,7 @@ export const BookList = () => {
   }
 
   return (
-    <div className="min-h-full max-w-2xl mx-auto pt-8 pb-30 flex flex-col">
+    <div className="min-h-full max-w-md md:max-w-2xl lg:max-w-4xl mx-auto pt-8 pb-30 flex flex-col">
       <header className="text-center mb-4">
         <h3 className="font-semibold">My Books</h3>
       </header>
@@ -210,6 +213,7 @@ export const BookList = () => {
                 closeEdit={closeEdit}
                 setBooks={setBooks}
                 setUpdatedBooks={setUpdatedBooks}
+                handleEditBooks={handleEditBooks}
               />
             ))}
       </div>
@@ -246,6 +250,7 @@ export const BookList = () => {
                         closeEdit={closeEdit}
                         setBooks={setBooks}
                         setUpdatedBooks={setUpdatedBooks}
+                        handleEditBooks={handleEditBooks}
                       />
                     ))}
               </div>
@@ -282,9 +287,10 @@ interface BookItemProps {
   closeEdit: () => void;
   setBooks: React.Dispatch<React.SetStateAction<Book[]>>;
   setUpdatedBooks: React.Dispatch<React.SetStateAction<Book['id'][]>>;
+  handleEditBooks: () => void;
 }
 
-export const BookItem = ({ book, isEdit, selectedBooks, setSelectedBooks, closeEdit, setBooks, setUpdatedBooks }: BookItemProps) => {
+export const BookItem = ({ book, isEdit, selectedBooks, setSelectedBooks, closeEdit, setBooks, setUpdatedBooks, handleEditBooks }: BookItemProps) => {
   const navigate = useNavigate();
   const progress = calculateProgress(book.currentLine, book.totalLines);
 
@@ -309,9 +315,9 @@ export const BookItem = ({ book, isEdit, selectedBooks, setSelectedBooks, closeE
         }
       }}
       onKeyDown={(e) => {
+        e.stopPropagation();
         if (e.key === ' ' || e.key === 'Enter') {
           e.preventDefault();
-          e.stopPropagation();
 
           if (isEdit) {
             setSelectedBooks((prev) => {
@@ -336,6 +342,16 @@ export const BookItem = ({ book, isEdit, selectedBooks, setSelectedBooks, closeE
           defaultValue={book.title}
           autoFocus
           onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Escape') {
+              closeEdit();
+            }
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleEditBooks();
+            }
+          }}
           onChange={(e) => {
             const newTitle = (e.target as HTMLInputElement).value.trim();
             if (newTitle === book.title) return;
