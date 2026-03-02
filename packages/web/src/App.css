@@ -41,3 +41,13 @@
 .read-the-docs {
   color: #888;
 }
+
+.book-cover::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  right: 10px;
+  bottom: 10px;
+  border: 1px solid rgba(212, 175, 55, 0.5);
+}

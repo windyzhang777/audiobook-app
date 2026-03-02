@@ -24,7 +24,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Server uploaded files
 export const uploadsDir = path.join(process.cwd(), 'uploads');
-app.use(uploadsDir, express.static(uploadsDir));
+app.use('/uploads', express.static(uploadsDir));
 
 // Instances
 const bookRepository = new BookRepository();

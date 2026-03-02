@@ -27,6 +27,7 @@ export interface Book {
   userId: string;
   title: string;
   source: BookSource;
+  coverPath?: string;
   localPath: string;
   fileType: BookFileType;
 
@@ -63,6 +64,7 @@ export interface BookDto {
   userId: string;
   title: string;
   source: BookSource;
+  coverPath?: string;
 }
 
 export interface UpdateProgressRequest {

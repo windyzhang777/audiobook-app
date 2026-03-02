@@ -32,8 +32,12 @@ export class BookService {
 
   upload = async (filePath: string, fileType: string, bookTitle: string) => {
     let textContent: string;
+    let coverPath: string | undefined;
+
     try {
-      textContent = await this.textProcessorService.extractText(filePath, fileType);
+      const extraction = await this.textProcessorService.extractBookData(filePath, fileType);
+      textContent = extraction.text;
+      coverPath = extraction.coverPath ? `/uploads/${extraction.coverPath}` : undefined;
     } catch (error) {
       this.deleteFile(filePath);
       throw new Error(`Failed to extract text from file: ${error}`);
@@ -47,6 +51,7 @@ export class BookService {
       userId: 'local-user',
       title: bookTitle,
       source: 'local',
+      coverPath,
       localPath: filePath,
       fileType: fileType as BookFileType,
       currentLine: 0,

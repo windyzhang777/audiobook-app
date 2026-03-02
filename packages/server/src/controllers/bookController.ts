@@ -24,8 +24,8 @@ export class BookController {
         return res.status(400).json({ message: 'Invalid file type' });
       }
 
-      const bookTitle = req.body.title || path.basename(req.file.originalname, path.extname(req.file.originalname));
-      const cleanTitle = fixEncoding(bookTitle);
+      const baseName = path.basename(req.file.originalname, path.extname(req.file.originalname));
+      const cleanTitle = fixEncoding(baseName);
 
       this.bookService.checkExisting(cleanTitle, req.file.path);
       const book = await this.bookService.upload(req.file.path, fileType, cleanTitle);

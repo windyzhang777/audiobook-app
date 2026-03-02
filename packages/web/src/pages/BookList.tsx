@@ -1,7 +1,7 @@
 import { UploadProgressDialog } from '@/components/UploadProgress';
 import { api } from '@/services/api';
 import { calculateProgress, formatLocaleDateString, type Book } from '@audiobook/shared';
-import { BookOpen, Loader, RotateCcw, Trash2, Upload, X } from 'lucide-react';
+import { BookOpen, Loader, RotateCcw, Trash2, Upload } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -122,7 +122,7 @@ export const BookList = () => {
   }
 
   return (
-    <div className="min-h-full max-w-md md:max-w-2xl lg:max-w-4xl mx-auto pt-8 pb-30 flex flex-col">
+    <div className="min-h-full max-w-md md:max-w-2xl lg:max-w-4xl mx-auto pt-8 pb-30 px-6 flex flex-col">
       <header className="text-center mb-4">
         <h3 className="font-semibold">My Books</h3>
       </header>
@@ -189,7 +189,7 @@ export const BookList = () => {
       )}
 
       {/* Books To Read */}
-      <div className="py-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="py-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-10">
         {booksToRead.length === 0 && booksCompleted.length > 0 && (
           <div className="text-center text-gray-500 col-span-full">
             <BookOpen className="mx-auto mb-4 opacity-50" />
@@ -236,7 +236,7 @@ export const BookList = () => {
           </div>
           <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${showCompleted ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
             <div className="overflow-hidden">
-              <div className="py-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="py-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-10">
                 {booksCompleted.length !== 0 &&
                   booksCompleted
                     .sort((a, b) => b.lastReadAt!.localeCompare(a.lastReadAt!))
@@ -332,55 +332,79 @@ export const BookItem = ({ book, isEdit, selectedBooks, setSelectedBooks, closeE
           }
         }
       }}
-      className="flex flex-col justify-center items-center gap-4 bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer p-4"
-      style={{ backgroundColor: selectedBooks.includes(book.id) ? 'lightgray' : '' }}
+      className="relative aspect-3/4 max-h-64 w-full rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group"
     >
-      {isEdit ? (
-        <input
-          type="text"
-          name="title"
-          defaultValue={book.title}
-          autoFocus
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => {
-            e.stopPropagation();
-            if (e.key === 'Escape') {
-              closeEdit();
-            }
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              handleEditBooks();
-            }
-          }}
-          onChange={(e) => {
-            const newTitle = (e.target as HTMLInputElement).value.trim();
-            if (newTitle === book.title) return;
-            setUpdatedBooks((prev) => [...prev, book.id]);
-            setBooks((prev) => prev.map((b) => (b.id === book.id ? { ...b, title: newTitle } : b)));
-          }}
-          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring focus:border-blue-300 transition"
-        />
-      ) : (
-        <h3 className="font-medium w-full truncate">{book.title}</h3>
-      )}
+      <div className="relative w-full h-full overflow-hidden">
+        {book.coverPath ? (
+          <img
+            src={`${import.meta.env.VITE_API_URL}${book.coverPath}`}
+            alt={`${book.title} cover`}
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            onError={(e) => {
+              e.currentTarget.src = '/default-cover.png';
+            }}
+          />
+        ) : (
+          <BookPlaceholder title={book.title} />
+        )}
+      </div>
 
-      {!isEdit ? (
-        book.lastCompleted ? (
-          <div className="text-xs">Last Read: {formatLocaleDateString(new Date(book.lastReadAt!))}</div>
-        ) : book.currentLine === 0 ? (
-          <div
-            className={`${isEdit ? '' : 'shake-active'} bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 via-indigo-500 to-purple-500 bg-clip-text text-transparent text-xs font-extrabold`}
-          >
-            START READING!
-          </div>
+      <div className="absolute bottom-0 -tranlate-y-1/2 w-full flex flex-col justify-center items-center gap-2 bg-white/80 p-4 pb-6">
+        {isEdit ? (
+          <input
+            type="text"
+            name="title"
+            defaultValue={book.title}
+            autoFocus
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Escape') {
+                closeEdit();
+              }
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleEditBooks();
+              }
+            }}
+            onChange={(e) => {
+              const newTitle = (e.target as HTMLInputElement).value.trim();
+              if (newTitle === book.title) return;
+              setUpdatedBooks((prev) => [...prev, book.id]);
+              setBooks((prev) => prev.map((b) => (b.id === book.id ? { ...b, title: newTitle } : b)));
+            }}
+            className="w-full text-xs text-center border border-gray-300 bg-white rounded-md px-3 py-2 focus:outline-none focus:ring focus:border-blue-300 transition"
+          />
+        ) : (
+          <h3 className="font-medium w-full truncate">{book.title}</h3>
+        )}
+
+        {!isEdit ? (
+          book.lastCompleted ? (
+            <div className="text-xs">Last Read: {formatLocaleDateString(new Date(book.lastReadAt!))}</div>
+          ) : book.currentLine === 0 ? (
+            <div className={`${isEdit ? '' : 'shake-active'} bg-linear-to-r from-red-500 via-yellow-500 to-purple-500 bg-clip-text text-transparent text-xs font-extrabold`}>START READING!</div>
+          ) : (
+            <div className="text-xs">Progress: {progress}%</div>
+          )
         ) : (
           <div className="text-xs">Progress: {progress}%</div>
-        )
-      ) : (
-        <div className="text-xs">Progress: {progress}%</div>
-      )}
-
-      {isEdit && <X size={16} />}
+        )}
+      </div>
+      {selectedBooks.includes(book.id) && <div className="select-mask absolute top-0 left-0 w-full h-full bg-gray-400/60" />}
     </div>
   );
 };
+
+interface BookPlaceholderProps {
+  title: string;
+}
+
+const BookPlaceholder = ({ title }: BookPlaceholderProps) => (
+  <div className="book-cover relative select-none w-full h-full font-[Open_Sans] bg-linear-to-b from-sky-950 to-gray-900 flex flex-col items-center pl-6 pr-5 py-8 text-center border-black/10 shadow-inner">
+    <span className="text-sm uppercase font-semibold text-white/80 leading-relaxed line-clamp-4 border-t-2 border-b-2 py-2 border-amber-400">{title}</span>
+
+    {/* Binding line */}
+    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-white/30" />
+  </div>
+);

@@ -812,7 +812,7 @@ export const BookReader = () => {
             <BookIcon size={16} />
           </span>
 
-          <span title={`Progress: Line ${currentLine} of ${totalLines}`} className="h-8 w-8 pl-1 text-xs text-gray-600 bg-transparent! cursor-default">
+          <span title={`Progress: Line ${currentLine} of ${totalLines}`} className="h-8 w-8 flex justify-center items-center text-xs text-gray-600 bg-transparent! cursor-default">
             {calculateProgress(currentLine, totalLines)}%
           </span>
 
