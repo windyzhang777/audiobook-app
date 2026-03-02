@@ -116,6 +116,19 @@ export class BookController {
     }
   };
 
+  deleteContent = (req: Request, res: Response) => {
+    const { id } = req.params;
+    const lineIndex = parseInt(req.query.line as string);
+
+    try {
+      this.bookService.deleteContent(id as string, lineIndex);
+      res.status(204).send();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Error deleting line ${lineIndex} from book`;
+      return res.status(400).json({ message });
+    }
+  };
+
   delete = (req: Request, res: Response) => {
     try {
       this.bookService.delete(req.params.id as string);

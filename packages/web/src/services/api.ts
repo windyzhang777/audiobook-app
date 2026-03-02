@@ -84,6 +84,12 @@ export const api = {
       }
     },
 
+    deleteLine: async (id: string, lineIndex: number) => {
+      await fetch(`/api/books/${id}/content?line=${lineIndex}`, {
+        method: 'DELETE',
+      });
+    },
+
     delete: async (id: string) => {
       await fetch(`/api/books/${id}`, {
         method: 'DELETE',

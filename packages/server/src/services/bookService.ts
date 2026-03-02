@@ -87,6 +87,24 @@ export class BookService {
     return updated;
   };
 
+  deleteContent = (id: string, lineIndex: number) => {
+    const content = this.bookRepository.getContent(id);
+    if (!content) {
+      throw new Error(`Content for book with ID ${id} not found`);
+    }
+
+    if (lineIndex < 0 || lineIndex >= content.lines.length) {
+      throw new Error(`Line index ${lineIndex} is out of bounds`);
+    }
+
+    // Remove the specified line
+    content.lines.splice(lineIndex, 1);
+    content.pagination.total = content.lines.length;
+    content.pagination.hasMore = lineIndex < content.lines.length;
+
+    this.bookRepository.setContent(id, content);
+  };
+
   delete = (id: string) => {
     const found = this.bookRepository.getById(id);
     if (!found) {
