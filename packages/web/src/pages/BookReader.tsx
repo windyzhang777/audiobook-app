@@ -1,15 +1,37 @@
+import { useSaveToLocal } from '@/common/useSaveToLocal';
 import { useSearchBook } from '@/common/useSearchBook';
 import { useUpdateBook } from '@/common/useUpdateBook';
 import { triggerSuccess } from '@/helper';
 import { api } from '@/services/api';
 import { speechService, type SpeechConfigs } from '@/services/SpeechService';
 import { calculateProgress, PAGE_SIZE, type Book, type BookContent, type BookMark, type SpeechOptions, type TextOptions } from '@audiobook/shared';
-import { ArrowBigUp, ArrowLeft, AudioLines, Bookmark, BookmarkX, LibraryBig, Loader, Loader2, MapPin, Minus, Pause, Play, Plus, Search, UsersRound, X } from 'lucide-react';
+import {
+  ArrowBigUp,
+  ArrowLeft,
+  AudioLines,
+  BookIcon,
+  Bookmark,
+  BookmarkPlus,
+  BookmarkX,
+  LibraryBig,
+  ListX,
+  Loader,
+  Loader2,
+  MapPin,
+  Minus,
+  Pause,
+  Play,
+  Plus,
+  Save,
+  Search,
+  UsersRound,
+  X,
+} from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Virtuoso, type LocationOptions, type VirtuosoHandle } from 'react-virtuoso';
 
-export type ReadingMode = 'user' | 'focus';
+export type ReadingMode = 'user' | 'focus' | 'edit';
 
 const SPEECH_RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 const BOOKMARK_TEXT_LIMIT = 20;
@@ -46,7 +68,7 @@ export const BookReader = () => {
   const [selectedVoice, setSelectedVoice] = useState<VoiceOption>(VOICE_FALLBACK);
   const [lastCompleted, setLastCompleted] = useState<string>();
   const [bookmarks, setBookmarks] = useState<BookMark[]>([]);
-  const updatedBook = useMemo(
+  const updatedBook: Partial<Book> = useMemo(
     () => ({
       currentLine,
       lastCompleted,
@@ -55,7 +77,16 @@ export const BookReader = () => {
     }),
     [book?.settings, currentLine, lastCompleted, bookmarks, fontSize, speechRate, selectedVoice.id],
   );
-  const canUpdate = !loading && JSON.stringify(updatedBook) !== JSON.stringify({ currentLine: book?.currentLine, settings: book?.settings });
+
+  const canUpdate =
+    !loading &&
+    JSON.stringify(updatedBook) !==
+      JSON.stringify({
+        currentLine: book?.currentLine,
+        lastCompleted: book?.lastCompleted,
+        bookmarks: book?.bookmarks,
+        settings: book?.settings,
+      });
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const isUserScrollRef = useRef(true);
@@ -91,12 +122,12 @@ export const BookReader = () => {
       setReadingMode(mode);
     } else {
       clearSearch();
-      setReadingMode(readingMode);
+      setReadingMode(mode);
     }
   };
 
   const scrollToLine = useCallback((index: number, behavior: LocationOptions['behavior'] = 'smooth') => {
-    virtuosoRef.current?.scrollToIndex({ index, align: 'center', behavior });
+    virtuosoRef.current?.scrollToIndex({ index, align: 'center', behavior, offset: 250 });
   }, []);
 
   const handlePlayPause = () => {
@@ -105,6 +136,8 @@ export const BookReader = () => {
     if (isPlaying) {
       speechService.pause();
     } else {
+      scrollToLine(currentLine, 'auto');
+      forceControl(false, 'focus');
       const startFrom = currentLine >= totalLines ? 0 : currentLine;
       // if at the end, reset to start from the first line
       if (startFrom === 0) setCurrentLine(0);
@@ -114,6 +147,8 @@ export const BookReader = () => {
   };
 
   const handleLineClick = (lineIndex: number) => {
+    if (readingMode === 'edit') return;
+
     forceControl(false, 'focus');
     setCurrentLine(lineIndex);
     speechService.stop();
@@ -121,8 +156,8 @@ export const BookReader = () => {
   };
 
   const jumpToRead = (mode: ReadingMode = 'focus') => {
-    forceControl(false, mode);
     scrollToLine(currentLine, 'auto');
+    forceControl(false, mode);
   };
 
   const jumpToIndex = async (lineIndex: number = currentLine) => {
@@ -175,8 +210,19 @@ export const BookReader = () => {
     });
   };
 
+  const deleteLine = async (lineIndex: number) => {
+    if (!id) return;
+
+    await api.books.deleteLine(id, lineIndex);
+    setLines((prev) => prev.filter((_, i) => i !== lineIndex));
+    if (currentLine >= lineIndex && currentLine > 0) {
+      setCurrentLine((prev) => prev - 1);
+    }
+  };
+
   const { flushUpdate } = useUpdateBook(id, updatedBook, canUpdate, setBook);
   const { searchInputRef, searchText, setSearchText, searchRes, currentMatch, prevMatch, nextMatch, clearSearch } = useSearchBook(id, currentLine, jumpToIndex, forceControl);
+  const { saveBookmarksToLocal, importBookmarksFromLocal } = useSaveToLocal();
 
   useEffect(() => {
     if (!id) return;
@@ -277,13 +323,18 @@ export const BookReader = () => {
         e.preventDefault();
         moveToLine(Math.max(currentLine - 1, 0));
       }
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        forceControl(true, 'focus');
+      }
     };
 
     const moveToLine = (lineIndex: number) => {
       if (lineIndex == currentLine) return;
 
-      forceControl(false, 'focus');
       scrollToLine(currentLine, 'auto');
+      forceControl(false, 'focus');
       setCurrentLine(lineIndex);
 
       if (isPlaying) {
@@ -356,8 +407,12 @@ export const BookReader = () => {
               {...props}
               ref={ref}
               tabIndex={0}
-              onWheel={() => forceControl(true, 'focus')}
-              onTouchMove={() => forceControl(true, 'focus')}
+              onWheel={() => {
+                forceControl(true, 'focus');
+              }}
+              onTouchMove={() => {
+                forceControl(true, 'focus');
+              }}
               className="outline-none list-none text-left pl-14 pr-11"
               style={{ ...style, fontSize }}
             >
@@ -414,17 +469,32 @@ export const BookReader = () => {
               className={`group relative cursor-pointer my-1 px-2 transition-colors duration-200 ease-in-out rounded-lg ${index === currentLine ? 'bg-amber-100 font-medium' : 'hover:bg-gray-50'} focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-opacity-50 ${isBookmarked ? 'border border-r-4 border-amber-400 pr-2' : 'border-r-4 border-transparent'}`}
             >
               {searchText ? getHighlightedText(line, searchText) : line}
-              <button
-                aria-label={`${isBookmarked ? 'Remove' : 'Add'} bookmark for line ${index + 1}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleBookmark(index, line);
-                }}
-                title={isBookmarked ? 'Remove Bookmark' : 'Add Bookmark'}
-                className={`absolute -right-9 top-0 text-amber-400 hover:opacity-100 transition-opacity duration-150 ${isBookmarked ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}`}
-              >
-                <Bookmark size={16} fill="currentColor" />
-              </button>
+
+              {readingMode === 'edit' ? (
+                <button
+                  aria-label="Delete this line from the book"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteLine(index);
+                  }}
+                  title="Delete this line from the book"
+                  className={`absolute -right-9 top-0 text-gray-400 hover:opacity-100 transition-opacity duration-150 ${isBookmarked ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}`}
+                >
+                  <X size={16} fill="currentColor" />
+                </button>
+              ) : (
+                <button
+                  aria-label={`${isBookmarked ? 'Remove' : 'Add'} bookmark for line ${index + 1}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleBookmark(index, line);
+                  }}
+                  title={isBookmarked ? 'Remove Bookmark' : 'Add Bookmark'}
+                  className={`absolute -right-9 top-0 text-amber-400 hover:opacity-100 transition-opacity duration-150 ${isBookmarked ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}`}
+                >
+                  <Bookmark size={16} fill="currentColor" />
+                </button>
+              )}
             </li>
           );
         }}
@@ -465,16 +535,16 @@ export const BookReader = () => {
         id="control-panel"
         className="fixed top-1/2 -translate-y-1/2 left-2 h-auto text-sm text-gray-400 flex flex-col items-start gap-1 rounded-full bg-transparent z-10 *:flex *:items-center [&>button]:ml-1! [&>button]:bg-transparent [&>button]:hover:bg-amber-200 [&>button]:hover:text-gray-600 [&>button]:rounded-full! select-none"
       >
+        {/* Jump to Line */}
         <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent [&>button]:hover:bg-amber-200 [&>button]:hover:text-gray-600 *:rounded-full!">
           {/* Jump to start */}
           <button
-            id="jump-to-top"
-            title="Jump To Top"
+            id="jump-to-start"
+            title="Jump To Start"
             onClick={() => {
               jumpToIndex(0);
               forceControl(true, 'user');
             }}
-            className={showJumpButton ? 'text-gray-600!' : 'text-inherit'}
           >
             <ArrowBigUp size={16} />
           </button>
@@ -503,6 +573,7 @@ export const BookReader = () => {
           </button>
         </div>
 
+        {/* Voice & Rate */}
         <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent *:hover:bg-amber-200 *:hover:text-gray-600 *:rounded-full!">
           {/* Select Voice */}
           <span title="Select Voice" className="relative h-8 w-8 px-1">
@@ -579,7 +650,10 @@ export const BookReader = () => {
               ))}
             </select>
           </span>
+        </div>
 
+        {/* Bookmarks */}
+        <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent *:hover:bg-amber-200 *:hover:text-gray-600 *:rounded-full!">
           {/* Select Bookmark */}
           <span title="Bookmarks" className="relative h-8 w-8 px-1">
             <label htmlFor="select-bookmark" className="absolute top-1/2 -translate-y-1/2 left-2 pointer-events-none">
@@ -606,20 +680,49 @@ export const BookReader = () => {
               </option>
               {bookmarks.map((bookmark) => (
                 <option key={`bookmark-${bookmark.index}`} value={bookmark.index} className="text-ellipsis">
-                  Line {bookmark.index + 1}: {bookmark.text}
+                  {bookmark.text}({bookmark.index + 1})
                 </option>
               ))}
             </select>
           </span>
 
+          {/* Save Bookmarks to Local */}
+          <button
+            disabled={!book?.title || bookmarks.length === 0}
+            onClick={() => {
+              if (!book?.title || bookmarks.length === 0) return;
+              if (!confirm(`Overwrite local bookmarks for ${book?.title}?`)) return;
+              saveBookmarksToLocal(book.title, bookmarks);
+            }}
+            title="Save bookmarks to local"
+          >
+            <Save size={16} />
+          </button>
+
+          {/* Import Bookmarks */}
+          <button
+            disabled={!book?.title}
+            onClick={() => {
+              if (!book?.title) return;
+              if (!confirm(`Import bookmarks for [${book?.title}] from last saved?`)) return;
+              const merged = importBookmarksFromLocal(book.title, bookmarks);
+              if (!merged || merged.length === 0) return;
+              setBookmarks(merged);
+              alert(`Imported ${merged.length} bookmarks for ${book?.title}!`);
+            }}
+            title="Import bookmarks from last saved"
+          >
+            <BookmarkPlus size={16} />
+          </button>
+
           {/* Clear Bookmarks */}
           <button
-            disabled={bookmarks.length === 0}
+            disabled={!book?.title || bookmarks.length === 0}
             onClick={() => {
-              if (!confirm('Deleted all bookmarks?')) return;
+              if (!confirm(`Deleted all ${bookmarks.length} bookmarks for [${book?.title}]?`)) return;
               setBookmarks([]);
             }}
-            title="Remove all bookmarks"
+            title={`Deleted all ${bookmarks.length} bookmarks for [${book.title}]`}
           >
             <BookmarkX size={16} />
           </button>
@@ -688,14 +791,36 @@ export const BookReader = () => {
           )}
         </button>
 
-        <span title={`Progress: Line ${currentLine} of ${totalLines}`} className="h-8 w-8 ml-2 text-xs text-gray-600 bg-transparent! cursor-default">
-          {calculateProgress(currentLine, totalLines)}%
-        </span>
-
-        {/* Nav back to books */}
-        <button id="back-to-books" onClick={() => navigateBack()} title="Back to Books">
-          <LibraryBig size={16} />
+        {/* Edit book */}
+        <button
+          id="edit-book"
+          onClick={() => {
+            if (readingMode !== 'edit') {
+              forceControl(true, 'edit');
+            } else {
+              forceControl(false, 'focus');
+            }
+          }}
+          title="Edit book"
+          className={readingMode === 'edit' ? 'text-gray-600 bg-green-400!' : 'text-inherit bg-inherit'}
+        >
+          <ListX size={16} />
         </button>
+
+        <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent *:hover:bg-amber-200 *:hover:text-gray-600 *:rounded-full!">
+          <span title={book?.title} className="h-8 w-8 pl-2 text-xs text-gray-600 bg-transparent! cursor-default">
+            <BookIcon size={16} />
+          </span>
+
+          <span title={`Progress: Line ${currentLine} of ${totalLines}`} className="h-8 w-8 pl-1 text-xs text-gray-600 bg-transparent! cursor-default">
+            {calculateProgress(currentLine, totalLines)}%
+          </span>
+
+          {/* Nav back to books */}
+          <button id="back-to-books" onClick={() => navigateBack()} title="Back to Books">
+            <LibraryBig size={16} />
+          </button>
+        </div>
       </div>
     </div>
   );
