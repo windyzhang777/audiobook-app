@@ -188,8 +188,8 @@ export class SpeechService {
           playbackRate: configs.rate || 1.0,
           position: index,
         });
-      } catch (e) {
-        console.error('Error updating position state:', e);
+      } catch (error) {
+        console.error('Error updating position state:', error);
       }
     }
 

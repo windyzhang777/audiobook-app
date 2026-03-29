@@ -1,0 +1,23 @@
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - '27017:27017' # Maps the DB to local
+    volumes:
+      - mongo_data:/data/db # Persists large book data
+
+  # comment out the server so to run 'npm run dev' locally for faster debugging
+  # server:
+  #   build:
+  #     context: . # [IMPORTANT] Set to root so it sees all packages
+  #     dockerfile: ./packages/server/Dockerfile
+  #   ports:
+  #     - '3000:3000'
+  #   environment:
+  #     - MONGODB_URI=mongodb://mongodb:27017/audiobook-app
+  #   depends_on:
+  #     - mongodb
+
+volumes:
+  mongo_data:

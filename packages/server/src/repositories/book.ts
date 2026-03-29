@@ -1,44 +1,206 @@
-import { Book, BookContent } from '@audiobook/shared';
+import { Book, BookContent, BookContentPaginated, Chapter, PAGE_SIZE } from '@audiobook/shared';
+import mongoose, { Schema } from 'mongoose';
+import { v4 as uuidv4 } from 'uuid';
+
+const BookSchema = new Schema<Book>(
+  {
+    _id: { type: String, default: () => uuidv4() },
+    userId: { type: String, required: true, index: true },
+    title: { type: String, required: true, index: true },
+    source: { type: String, required: true }, // local | web
+    localPath: String,
+    coverPath: String,
+    bookUrl: String,
+    fileType: String,
+
+    currentLine: { type: Number, default: 0 },
+    totalLines: { type: Number, required: true },
+
+    createdAt: { type: String, required: true },
+    lastReadAt: String,
+    updatedAt: { type: String, required: true },
+    lastCompleted: String,
+    chapters: [{ title: String, source: String, isLoaded: Boolean, startIndex: Number }],
+    bookmarks: [{ index: Number, text: String }],
+    settings: { fontSize: Number, rate: Number, voice: String },
+    audioPath: String,
+  },
+  { _id: false, toJSON: { virtuals: true }, toObject: { virtuals: true } },
+);
+
+interface IBookContent extends BookContent {
+  _id: string;
+}
+const BookContentSchema = new Schema<IBookContent>(
+  {
+    _id: { type: String, required: true },
+    bookId: { type: String, required: true, index: true },
+    lines: [{ type: String }],
+    lang: { type: String, default: 'en-US' },
+  },
+  { _id: false, toJSON: { virtuals: true }, toObject: { virtuals: true } },
+);
+
+const BookModel = mongoose.model<Book>('Book', BookSchema);
+const BookContentModel = mongoose.model<IBookContent>('BookContent', BookContentSchema);
 
 export class BookRepository {
-  private books: Map<string, Book> = new Map();
-  private bookContents: Map<string, BookContent> = new Map();
-
-  getAll = (): Book[] => {
-    return Array.from(this.books.values());
+  getAll = async (): Promise<Book[]> => {
+    return await BookModel.find().lean();
   };
 
-  getById = (id: string): Book | undefined => {
-    return this.books.get(id);
+  getById = async (_id: string): Promise<Book | null> => {
+    return await BookModel.findById(_id).lean();
   };
 
-  getByTitle = (title: string): Book | undefined => {
-    return Array.from(this.books.values()).find((book) => book.title === title);
+  getByTitle = async (title: string): Promise<Book | null> => {
+    return await BookModel.findOne({ title }).lean();
   };
 
-  add = (book: Book): void => {
-    this.books.set(book.id, book);
+  addBook = async (book: Book) => {
+    const newBook = new BookModel({ ...book, _id: book._id });
+    await newBook.save();
   };
 
-  update = (id: string, updates: Partial<Book>): Book | undefined => {
-    const found = this.books.get(id);
-    if (!found) return undefined;
-
-    const updatedBook = { ...found, ...updates };
-    this.books.set(id, updatedBook);
-    return updatedBook;
+  updateBook = async (_id: string, updates: Partial<Book>): Promise<Book | null> => {
+    const updated = await BookModel.findByIdAndUpdate(_id, { $set: updates }, { returnDocument: 'after' }).lean();
+    return updated;
   };
 
-  delete = (id: string): boolean => {
-    this.bookContents.delete(id);
-    return this.books.delete(id);
+  delete = async (_id: string): Promise<boolean> => {
+    const [_, bookDeleted] = await Promise.all([BookContentModel.findByIdAndDelete(_id).lean(), BookModel.findByIdAndDelete(_id).lean()]);
+    return !!bookDeleted;
   };
 
-  getContent = (id: string): BookContent | undefined => {
-    return this.bookContents.get(id);
+  getContent = async (_id: string, offset: number = 0, limit: number = PAGE_SIZE): Promise<BookContentPaginated | null> => {
+    const [book, doc] = await Promise.all([
+      BookModel.findById(_id).select('chapters').lean(),
+      BookContentModel.findById(_id, {
+        bookId: 1,
+        lang: 1,
+        lines: { $slice: [offset, limit] },
+      }).lean(),
+    ]);
+
+    if (!doc || !book) return null;
+
+    const totalDoc = await BookContentModel.findById(_id).select('lines').lean();
+    const total = totalDoc?.lines.length || 0;
+    const hasUnloadedChapters = book.chapters.some((c) => !c.isLoaded);
+
+    return {
+      ...doc,
+      bookId: doc.bookId,
+      pagination: {
+        total,
+        offset,
+        limit,
+        hasMore: offset + limit < total || hasUnloadedChapters,
+      },
+    };
   };
 
-  setContent = (id: string, content: BookContent): void => {
-    this.bookContents.set(id, content);
+  setContent = async (_id: string, content: BookContent) => {
+    const { bookId, lines, lang } = content;
+    await BookContentModel.findByIdAndUpdate(
+      _id,
+      {
+        $set: { _id, bookId, lines, lang },
+      },
+      { upsert: true, returnDocument: 'after' },
+    );
+  };
+
+  /**
+   * Appends new lines to the book content
+   */
+  appendLines = async (_id: string, lines: string[], lang?: string): Promise<void> => {
+    const update: mongoose.UpdateQuery<IBookContent> = {
+      $push: { lines: { $each: lines } },
+    };
+
+    if (lang) {
+      update.$set = { lang };
+    }
+
+    await BookContentModel.findByIdAndUpdate(_id, update);
+  };
+
+  appendChapters = async (_id: string, chapters: Chapter[]): Promise<void> => {
+    await BookModel.updateOne(
+      { _id },
+      {
+        $push: { chapters: { $each: chapters } },
+        $set: { updatedAt: new Date().toISOString() },
+      },
+    );
+  };
+
+  /**
+   * Mark a chapter as loaded
+   */
+  updateChapter = async (_id: string, chapterIndex: number, title?: string): Promise<void> => {
+    const content = await BookContentModel.findById(_id).select('lines').lean();
+    const currentTotalLines = content?.lines.length || 0;
+
+    const update: mongoose.UpdateQuery<Book> = {
+      $set: {
+        [`chapters.${chapterIndex}.isLoaded`]: true,
+        [`chapters.${chapterIndex}.startIndex`]: currentTotalLines,
+      },
+    };
+
+    if (title && update.$set) {
+      update.$set[`chapters.${chapterIndex}.title`] = title;
+    }
+
+    await BookModel.updateOne({ _id }, update);
+  };
+
+  truncateFromIndex = async (_id: string, chapterIndex: number): Promise<void> => {
+    const book = await BookModel.findById(_id).select('chapters').lean();
+    if (!book) throw new Error(`Book [${_id}] not found`);
+
+    const targetChapter = book.chapters[chapterIndex];
+    const startLine = targetChapter.startIndex;
+    if (targetChapter.startIndex === undefined || !targetChapter.isLoaded) throw new Error(`Chapter ${targetChapter.title} not loaded yet`);
+
+    // Truncate the Content (Remove ALL lines from startLine to the end)
+    await BookContentModel.findByIdAndUpdate(_id, {
+      $push: {
+        lines: {
+          $each: [],
+          $slice: startLine, // Keeps only lines 0 to startLine-1
+        },
+      },
+    });
+
+    // Truncate the Chapters list
+    // Keep chapters from 0 to chapterIndex, remove everything after.
+    const remainingChapters = book.chapters.slice(0, chapterIndex + 1);
+    remainingChapters[chapterIndex].isLoaded = false;
+
+    await BookModel.findByIdAndUpdate(_id, {
+      $set: {
+        chapters: remainingChapters,
+        totalLines: startLine,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+
+    // Sync total lines count (it will now be equal to startLine)
+    await this.syncTotalLines(_id);
+  };
+
+  /**
+   * Update the total lines count in the metadata (Book) to match
+   * the actual lines in the content (BookContent).
+   */
+  syncTotalLines = async (_id: string): Promise<number> => {
+    const content = await BookContentModel.findById(_id).select('lines').lean();
+    const total = content?.lines.length || 0;
+
+    await BookModel.findByIdAndUpdate(_id, { $set: { totalLines: total } });
+    return total;
   };
 }

@@ -69,7 +69,7 @@ describe('<UploadProgressDialog />', () => {
   });
 
   it('navigates to complete state on success', async () => {
-    vi.mocked(api.upload.smartUpload).mockResolvedValue({ id: 'new-book-id' } as Book);
+    vi.mocked(api.upload.smartUpload).mockResolvedValue({ id: 'new-book-id' } as unknown as Book);
 
     render(<UploadProgressDialog file={mockFile} onComplete={mockOnComplete} />);
 

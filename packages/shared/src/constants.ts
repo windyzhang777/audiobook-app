@@ -1,9 +1,17 @@
+export const UPLOAD_CHUNK_SIZE = 1 * 1024 * 1024; // 1MB
+
+export const CHAPTER_SIZE = 5;
 export const PAGE_SIZE = 50;
+export const ALL_LINES = 999999;
 
 export const ONE_MINUTE = 60 * 1000;
-export const FIVE_MINUTES = 60 * 1000;
+export const TWO_MINUTES = 2 * 60 * 1000;
+export const FIVE_MINUTES = 5 * 60 * 1000;
+export const TEN_MINUTES = 10 * 60 * 1000;
 export const ONE_HOUR = 60 * 60 * 1000;
 export const ONE_DAY = 24 * 60 * 60 * 1000;
+
+export const CHAPTER_PREFIX = '~~~'; // Used to identify chapter titles in the lines array
 
 /**
  * Maps franc 3-letter ISO 639-3 code (e.g., 'cmn', 'eng') to 2-letter BCP 47 codes + region (e.g., 'en-US', 'zh-CN')

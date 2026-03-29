@@ -1,35 +1,40 @@
-import { ONE_DAY, ONE_HOUR } from '@audiobook/shared';
 import { createWriteStream } from 'fs';
 import fs from 'fs/promises';
+import mongoose, { Schema } from 'mongoose';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { uploadsDir } from '../index';
 
 interface UploadSession {
-  id: string;
+  _id: string;
   fileName: string;
   fileSize: number;
   fileType: string;
   totalChunks: number;
-  uploadedChunks: Set<number>;
+  uploadedChunks: number[];
   tempDir: string;
   createdAt: Date;
   lastActivity: Date;
 }
 
+const UploadSessionSchema = new Schema<UploadSession>({
+  _id: { type: String, required: true }, // uploadId
+  fileName: { type: String, required: true },
+  fileSize: { type: Number, required: true },
+  fileType: { type: String, required: true },
+  totalChunks: { type: Number, required: true },
+  uploadedChunks: [Number],
+  tempDir: { type: String, required: true },
+  lastActivity: { type: Date, default: Date.now, index: { expires: '24h' } }, // auto-cleanup
+});
+export const UploadSessionModel = mongoose.model('UploadSession', UploadSessionSchema);
+
 export class UploadService {
-  private sessions = new Map<string, UploadSession>();
-  private cleanupInterval: NodeJS.Timeout;
   private uploadsDir = uploadsDir;
 
   constructor() {
     // Ensure temp directory exists
     this.ensureDirectories();
-
-    // Start cleanup job (runs every hour)
-    this.cleanupInterval = setInterval(() => {
-      this.cleanupStaleUploads();
-    }, ONE_HOUR);
   }
 
   /**
@@ -37,27 +42,24 @@ export class UploadService {
    */
   initializeUpload = async (fileName: string, fileSize: number, fileType: string, totalChunks: number): Promise<string> => {
     const uploadId = uuidv4();
-    const tempDir = path.join(this.uploadsDir, uploadId);
+    const tempDir = path.join(this.uploadsDir, 'temp', uploadId);
 
     // Create temp directory for this upload
     await fs.mkdir(tempDir, { recursive: true });
 
-    const session: UploadSession = {
-      id: uploadId,
+    await UploadSessionModel.create({
+      _id: uploadId,
       fileName,
       fileSize,
       fileType,
       totalChunks,
-      uploadedChunks: new Set(),
+      uploadedChunks: [],
       tempDir,
       createdAt: new Date(),
       lastActivity: new Date(),
-    };
-
-    this.sessions.set(uploadId, session);
+    });
 
     console.log(`Upload session initialized: ${uploadId} (${fileName}, ${totalChunks} chunks)`);
-
     return uploadId;
   };
 
@@ -65,10 +67,9 @@ export class UploadService {
    * Save a chunk to disk
    */
   saveChunk = async (uploadId: string, chunkIndex: number, chunkData: Buffer): Promise<void> => {
-    const session = this.sessions.get(uploadId);
-
+    const session = await UploadSessionModel.findById(uploadId);
     if (!session) {
-      throw new Error('Upload session not found');
+      throw new Error('Upload session expired or not found');
     }
 
     // Validate chunk index
@@ -80,44 +81,48 @@ export class UploadService {
     const chunkPath = path.join(session.tempDir, `chunk-${String(chunkIndex).padStart(5, '0')}`);
     await fs.writeFile(chunkPath, chunkData);
 
-    // Mark chunk as uploaded
-    session.uploadedChunks.add(chunkIndex);
-    session.lastActivity = new Date();
+    // Mark chunk as uploaded and update in Mongo
+    const updatedSession = await UploadSessionModel.findByIdAndUpdate(
+      uploadId,
+      {
+        $addToSet: { uploadedChunks: chunkIndex },
+        $set: { lastActivity: new Date() },
+      },
+      { returnDocument: 'after', lean: true },
+    );
 
-    console.log(`Chunk ${chunkIndex + 1}/${session.totalChunks} saved for upload ${uploadId} ` + `(${session.uploadedChunks.size}/${session.totalChunks} complete)`);
+    if (updatedSession) {
+      console.log(`Chunk ${chunkIndex + 1}/${updatedSession.totalChunks} saved for upload ${uploadId} ` + `(${updatedSession.uploadedChunks.length}/${updatedSession.totalChunks} complete)`);
+    }
   };
 
   /**
    * Merge all chunks and finalize the upload
    */
   finalizeUpload = async (uploadId: string, outputDir = uploadsDir): Promise<Record<string, string>> => {
-    const session = this.sessions.get(uploadId);
-
+    const session = await UploadSessionModel.findById(uploadId);
     if (!session) {
       throw new Error('Upload session not found');
     }
 
     // Verify all chunks are uploaded
-    if (session.uploadedChunks.size !== session.totalChunks) {
+    if (session.uploadedChunks.length !== session.totalChunks) {
       const missing = [];
       for (let i = 0; i < session.totalChunks; i++) {
-        if (!session.uploadedChunks.has(i)) {
+        if (!session.uploadedChunks.includes(i)) {
           missing.push(i);
         }
       }
       throw new Error(`Missing chunks: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '...' : ''}`);
     }
 
-    // Ensure output directory exists
-    await fs.mkdir(outputDir, { recursive: true });
-
     const fileName = session.fileName;
-    const filePath = path.join(outputDir, `${uuidv4()}-${fileName}`);
+    const filePath = path.join(outputDir, uploadId);
 
     console.log(`Merging ${session.totalChunks} chunks for ${uploadId}...`);
 
     // Merge chunks
-    await this.mergeChunks(session, filePath);
+    await this.mergeChunks(session.toObject(), filePath);
 
     // Cleanup
     await this.cleanupSession(uploadId);
@@ -136,8 +141,8 @@ export class UploadService {
     try {
       for (let i = 0; i < session.totalChunks; i++) {
         const chunkPath = path.join(session.tempDir, `chunk-${String(i).padStart(5, '0')}`);
-
         const chunkData = await fs.readFile(chunkPath);
+
         await new Promise<void>((resolve, reject) => {
           const canContinue = writeStream.write(chunkData);
 
@@ -165,9 +170,9 @@ export class UploadService {
   /**
    * Get upload session status
    */
-  getStatus = (uploadId: string): { uploadedChunks: number[]; totalChunks: number; progress: number; fileName: string } | null => {
-    const session = this.sessions.get(uploadId);
-
+  getStatus = async (uploadId: string) => {
+    // : Promise<{ uploadedChunks: number[]; totalChunks: number; progress: number; fileName: string } | null{ uploadedChunks: number[]; totalChunks: number; progress: number; fileName: string } | null>
+    const session = await UploadSessionModel.findById(uploadId).lean();
     if (!session) {
       return null;
     }
@@ -175,7 +180,7 @@ export class UploadService {
     return {
       uploadedChunks: Array.from(session.uploadedChunks),
       totalChunks: session.totalChunks,
-      progress: (session.uploadedChunks.size / session.totalChunks) * 100,
+      progress: (session.uploadedChunks.length / session.totalChunks) * 100,
       fileName: session.fileName,
     };
   };
@@ -184,7 +189,7 @@ export class UploadService {
    * Cancel an upload session
    */
   cancelUpload = async (uploadId: string): Promise<void> => {
-    const session = this.sessions.get(uploadId);
+    const session = await UploadSessionModel.findById(uploadId);
 
     if (session) {
       await this.cleanupSession(uploadId);
@@ -196,36 +201,20 @@ export class UploadService {
    * Clean up a specific upload session
    */
   private cleanupSession = async (uploadId: string): Promise<void> => {
-    const session = this.sessions.get(uploadId);
+    const session = await UploadSessionModel.findById(uploadId);
 
     if (!session) return;
 
     // Delete temp directory
     try {
       await fs.rm(session.tempDir, { recursive: true, force: true });
+      const tempDir = path.join(this.uploadsDir, 'temp');
+      await fs.rm(tempDir, { recursive: true, force: true });
     } catch (error) {
       console.error(`Failed to delete temp directory for ${uploadId}:`, error);
     }
-
     // Remove from sessions
-    this.sessions.delete(uploadId);
-  };
-
-  /**
-   * Clean up stale uploads (older than 1 day)
-   */
-  private cleanupStaleUploads = async (): Promise<void> => {
-    const now = Date.now();
-    const staleThreshold = ONE_DAY; // 24 hours
-
-    for (const [uploadId, session] of this.sessions.entries()) {
-      const age = now - session.lastActivity.getTime();
-
-      if (age > staleThreshold) {
-        console.log(`Cleaning up stale upload: ${uploadId} (${Math.round(age / ONE_HOUR)}h old)`);
-        await this.cleanupSession(uploadId);
-      }
-    }
+    await UploadSessionModel.findByIdAndDelete(uploadId);
   };
 
   /**
@@ -233,12 +222,5 @@ export class UploadService {
    */
   private ensureDirectories = async (): Promise<void> => {
     await fs.mkdir(this.uploadsDir, { recursive: true });
-  };
-
-  /**
-   * Cleanup on shutdown
-   */
-  destroy = (): void => {
-    clearInterval(this.cleanupInterval);
   };
 }

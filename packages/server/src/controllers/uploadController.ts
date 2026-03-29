@@ -22,7 +22,7 @@ export class UploadController {
       }
 
       const { title } = getFileTitle(fileName);
-      this.bookService.checkExisting(title);
+      await this.bookService.checkExisting(title);
 
       // Initialize upload session
       const uploadId = await this.uploadService.initializeUpload(fileName, fileSize, fileType || 'application/octet-stream', totalChunks);
@@ -43,7 +43,7 @@ export class UploadController {
       const chunk = req.file;
 
       // Validate request
-      if (!uploadId || chunkIndex === undefined || !chunk) {
+      if (!uploadId || chunkIndex === undefined || !chunk || !chunk.buffer) {
         return res.status(400).json({ message: 'Missing required fields: uploadId, chunkIndex, chunk' });
       }
 
@@ -75,7 +75,7 @@ export class UploadController {
       const { fileType, title } = getFileTitle(fileName);
 
       // Create book using BookService
-      const book = await this.bookService.upload(filePath, fileType, title);
+      const book = await this.bookService.upload(title, filePath, fileType);
 
       res.status(200).json(book);
     } catch (error) {
@@ -89,7 +89,7 @@ export class UploadController {
    */
   getUploadStatus = async (req: Request, res: Response) => {
     try {
-      const status = this.uploadService.getStatus(req.params.uploadId as string);
+      const status = await this.uploadService.getStatus(req.params.uploadId as string);
 
       if (!status) {
         return res.status(404).json({ message: 'Upload session not found' });

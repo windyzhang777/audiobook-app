@@ -1,7 +1,8 @@
-import { UploadProgressDialog } from '@/components/UploadProgress';
+import { useScrape } from '@/common/useScrape';
+import { ScrapeProgressCompact, UploadProgressDialog } from '@/components/UploadProgress';
 import { api } from '@/services/api';
 import { calculateProgress, formatLocaleDateString, type Book } from '@audiobook/shared';
-import { BookOpen, Loader, RotateCcw, Trash2, Upload } from 'lucide-react';
+import { BellRing, BookOpen, LinkIcon, Loader, Loader2, RotateCcw, Trash2, Upload, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -11,8 +12,9 @@ export const BookList = () => {
   const [uploadingFile, setUploadingFile] = useState<{ file: File } | null>(null);
   const [isEdit, setIsEdit] = useState(false);
   const [showCompleted, setShowCompleted] = useState(true);
-  const [selectedBooks, setSelectedBooks] = useState<Book['id'][]>([]);
-  const [updatedBooks, setUpdatedBooks] = useState<Book['id'][]>([]);
+  const [selectedBooks, setSelectedBooks] = useState<Book['_id'][]>([]);
+  const [renamedBooks, setRenamedBooks] = useState<Book['_id'][]>([]);
+  const [updatedBooks, setUpdatedBooks] = useState<Record<string, number>>({});
 
   const canAction = isEdit && selectedBooks.length > 0;
   const booksCompleted = books.filter((book) => book.lastCompleted);
@@ -59,7 +61,7 @@ export const BookList = () => {
 
     setLoading(true);
     try {
-      await Promise.all(selectedBooks.map((bookId) => api.books.update(bookId, { currentLine: 0, lastCompleted: '' })));
+      await Promise.all(selectedBooks.map((bookId) => api.books.update(bookId, { lastCompleted: '' })));
       await loadBooks();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to reset selected books');
@@ -71,11 +73,11 @@ export const BookList = () => {
 
   const handleEditBooks = useCallback(() => {
     setSelectedBooks([]);
-    setUpdatedBooks([]);
+    setRenamedBooks([]);
     if (isEdit) {
       // Update books with changed titles
-      const booksToUpdate = books.filter((book) => updatedBooks.includes(book.id));
-      Promise.all(booksToUpdate.map((book) => api.books.update(book.id, { title: book.title })))
+      const booksToUpdate = books.filter((book) => renamedBooks.includes(book._id));
+      Promise.all(booksToUpdate.map((book) => api.books.update(book._id, { title: book.title })))
         .then(() => {
           loadBooks();
         })
@@ -86,7 +88,7 @@ export const BookList = () => {
     } else {
       setIsEdit(true);
     }
-  }, [isEdit, books, updatedBooks]);
+  }, [isEdit, books, renamedBooks]);
 
   const closeEdit = useCallback(() => {
     setSelectedBooks([]);
@@ -96,9 +98,35 @@ export const BookList = () => {
     }
   }, [isEdit]);
 
+  const handleUpdateChapters = useCallback(async (_id: string) => {
+    try {
+      const updatedBook = await api.books.updateChapters(_id);
+      setBooks((prev) => prev.map((b) => (b._id === _id ? updatedBook : b)));
+      setUpdatedBooks((prev) => {
+        const next = { ...prev };
+        delete next[_id];
+        return next;
+      });
+    } catch (error) {
+      console.error('Refresh failed:', error);
+    }
+  }, []);
+
+  const checkAllUpdates = useCallback(async () => {
+    try {
+      const updatedChapterCountByBookId = await api.books.checkUpdates();
+      setUpdatedBooks(updatedChapterCountByBookId);
+    } catch (error) {
+      console.error('Failed to check for updates:', error);
+    }
+  }, []);
+
+  const { scrapeUrl, setScrapeUrl, showUrlInput, toggleUrlInput, isScraping, scrapeProgress, error: scrapeError, handleScrape, handleStopScrape } = useScrape(closeEdit, loadBooks);
+
   useEffect(() => {
     loadBooks();
-  }, [uploadingFile]);
+    checkAllUpdates();
+  }, [uploadingFile, checkAllUpdates]);
 
   // hijack the browser's default escape
   useEffect(() => {
@@ -127,12 +155,59 @@ export const BookList = () => {
         <h3 className="font-semibold">My Books</h3>
       </header>
 
-      {/* Upload */}
-      <label className="flex justify-center items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 active:bg-blue-800">
-        <Upload size={16} />
-        <span>Upload a new book (txt, epub)</span>
-        <input aria-label="upload" type="file" accept=".txt,.pdf,.epub,.mobi" tabIndex={0} disabled={loading} onChange={handleUpload} onClick={closeEdit} className="hidden" />
-      </label>
+      {/* Upload & Scrape Controls */}
+      <div className="flex flex-col gap-3 mb-6">
+        <div className="flex gap-2">
+          {/* File Upload */}
+          <label className="flex-1 flex justify-center items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl cursor-pointer hover:bg-blue-700 transition-colors shadow-sm">
+            <Upload size={16} />
+            <span className="text-sm font-medium">Upload a new book (txt, epub)</span>
+            <input
+              aria-label="upload"
+              type="file"
+              accept=".txt,.epub"
+              tabIndex={0}
+              disabled={loading || isScraping}
+              onChange={handleUpload}
+              onClick={() => {
+                closeEdit();
+                if (showUrlInput) toggleUrlInput();
+              }}
+              className="hidden"
+            />
+          </label>
+
+          {/* Toggle URL Input */}
+          <button
+            onClick={toggleUrlInput}
+            className={`flex-1 flex justify-center items-center gap-2 px-4 py-3 border-2 rounded-xl transition-all ${
+              showUrlInput ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-gray-200 text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            <LinkIcon size={18} />
+            <span className="text-sm font-medium">Import from URL</span>
+          </button>
+        </div>
+
+        {/* URL Input Field (Collapsible) */}
+        {showUrlInput && (
+          <div className="flex gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+            <input
+              autoFocus
+              type="text"
+              placeholder="https://www.xpxs.net/book/<BOOK-ID>"
+              value={scrapeUrl}
+              onChange={(e) => setScrapeUrl(e.target.value)}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+              disabled={isScraping}
+              onKeyDown={(e) => e.key === 'Enter' && handleScrape()}
+            />
+            <button onClick={handleScrape} disabled={isScraping || !scrapeUrl} className="px-6 py-2 bg-blue-600 text-white rounded-xl font-medium text-sm disabled:bg-gray-400 flex items-center gap-2">
+              {isScraping ? <Loader2 size={16} className="animate-spin" /> : 'Scrape'}
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Edit Panel */}
       <div className="relative my-4 flex justify-end items-center text-xs text-gray-400">
@@ -175,8 +250,8 @@ export const BookList = () => {
         >
           <RotateCcw size={16} />
         </button>
-        <button aria-label={isEdit ? 'Done' : 'Edit'} onClick={handleEditBooks} className="hover:text-gray-600 transition-colors">
-          {isEdit ? 'Done' : 'Edit'}
+        <button aria-label={isEdit ? (selectedBooks.length > 0 ? 'Cancel' : 'Done') : 'Edit'} onClick={handleEditBooks} className="hover:text-gray-600 transition-colors">
+          {isEdit ? (selectedBooks.length > 0 ? 'Cancel' : 'Done') : 'Edit'}
         </button>
       </div>
 
@@ -199,21 +274,23 @@ export const BookList = () => {
         {booksToRead.length > 0 &&
           booksToRead
             .sort((a, b) => {
-              if (!a.lastReadAt) return 1;
-              if (!b.lastReadAt) return -1;
-              return b.lastReadAt.localeCompare(a.lastReadAt);
+              if (!a.updatedAt) return 1;
+              if (!b.updatedAt) return -1;
+              return b.updatedAt.localeCompare(a.updatedAt);
             })
             .map((book) => (
               <BookItem
-                key={book.id}
+                key={book._id}
                 book={book}
                 isEdit={isEdit}
                 selectedBooks={selectedBooks}
                 setSelectedBooks={setSelectedBooks}
                 closeEdit={closeEdit}
                 setBooks={setBooks}
-                setUpdatedBooks={setUpdatedBooks}
+                setRenamedBooks={setRenamedBooks}
                 handleEditBooks={handleEditBooks}
+                newChaptersCount={updatedBooks[book._id]}
+                handleUpdateChapters={handleUpdateChapters}
               />
             ))}
       </div>
@@ -239,18 +316,24 @@ export const BookList = () => {
               <div className="py-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-10">
                 {booksCompleted.length !== 0 &&
                   booksCompleted
-                    .sort((a, b) => b.lastReadAt!.localeCompare(a.lastReadAt!))
+                    .sort((a, b) => {
+                      if (!a.lastReadAt) return 1;
+                      if (!b.lastReadAt) return -1;
+                      return b.lastReadAt.localeCompare(a.lastReadAt);
+                    })
                     .map((book) => (
                       <BookItem
-                        key={book.id}
+                        key={book._id}
                         book={book}
                         isEdit={isEdit}
                         selectedBooks={selectedBooks}
                         setSelectedBooks={setSelectedBooks}
                         closeEdit={closeEdit}
                         setBooks={setBooks}
-                        setUpdatedBooks={setUpdatedBooks}
+                        setRenamedBooks={setRenamedBooks}
                         handleEditBooks={handleEditBooks}
+                        newChaptersCount={updatedBooks[book._id]}
+                        handleUpdateChapters={handleUpdateChapters}
                       />
                     ))}
               </div>
@@ -261,6 +344,21 @@ export const BookList = () => {
 
       {/* Upload Progress Dialog */}
       {uploadingFile && <UploadProgressDialog file={uploadingFile.file} onComplete={() => setUploadingFile(null)} onCancel={() => setUploadingFile(null)} />}
+      {scrapeProgress && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+          <div className="flex flex-col gap-1 bg-white rounded-2xl p-6 shadow-xl w-full max-w-sm border border-gray-100">
+            <div className="flex justify-between items-center gap-1 text-blue-600 font-semibold">
+              {scrapeError ? <span>{scrapeError}</span> : <span>{scrapeProgress.totalChunks > 0 ? scrapeProgress.message : 'Scraping Book Content...'}</span>}
+              <button onClick={handleStopScrape} className="text-xs font-bold text-red-500 hover:text-red-700 uppercase tracking-tighter">
+                <X size={20} />
+              </button>
+            </div>
+
+            {!scrapeError && <ScrapeProgressCompact progress={scrapeProgress} />}
+          </div>
+        </div>
+      )}
+
       <style>
         {`
           @keyframes shaking {
@@ -282,15 +380,17 @@ export const BookList = () => {
 interface BookItemProps {
   book: Book;
   isEdit: boolean;
-  selectedBooks: Book['id'][];
-  setSelectedBooks: React.Dispatch<React.SetStateAction<Book['id'][]>>;
+  selectedBooks: Book['_id'][];
+  setSelectedBooks: React.Dispatch<React.SetStateAction<Book['_id'][]>>;
   closeEdit: () => void;
   setBooks: React.Dispatch<React.SetStateAction<Book[]>>;
-  setUpdatedBooks: React.Dispatch<React.SetStateAction<Book['id'][]>>;
+  setRenamedBooks: React.Dispatch<React.SetStateAction<Book['_id'][]>>;
   handleEditBooks: () => void;
+  newChaptersCount: number;
+  handleUpdateChapters: (id: string) => Promise<void>;
 }
 
-export const BookItem = ({ book, isEdit, selectedBooks, setSelectedBooks, closeEdit, setBooks, setUpdatedBooks, handleEditBooks }: BookItemProps) => {
+export const BookItem = ({ book, isEdit, selectedBooks, setSelectedBooks, closeEdit, setBooks, setRenamedBooks, handleEditBooks, newChaptersCount, handleUpdateChapters }: BookItemProps) => {
   const navigate = useNavigate();
   const progress = calculateProgress(book.currentLine, book.totalLines);
 
@@ -298,20 +398,20 @@ export const BookItem = ({ book, isEdit, selectedBooks, setSelectedBooks, closeE
     <div
       role="button"
       tabIndex={0}
-      key={`book-${book.id}`}
-      aria-label={`Book ${book.id}`}
+      key={`book-${book._id}`}
+      aria-label={`Book ${book._id}`}
       onClick={() => {
         if (isEdit) {
           setSelectedBooks((prev) => {
-            if (prev.includes(book.id)) {
-              return prev.filter((id) => id !== book.id);
+            if (prev.includes(book._id)) {
+              return prev.filter((id) => id !== book._id);
             } else {
-              return [...prev, book.id];
+              return [...prev, book._id];
             }
           });
         } else {
           closeEdit();
-          navigate(`/book/${book.id}`);
+          navigate(`/book/${book._id}`);
         }
       }}
       onKeyDown={(e) => {
@@ -321,14 +421,14 @@ export const BookItem = ({ book, isEdit, selectedBooks, setSelectedBooks, closeE
 
           if (isEdit) {
             setSelectedBooks((prev) => {
-              if (prev.includes(book.id)) {
-                return prev.filter((id) => id !== book.id);
+              if (prev.includes(book._id)) {
+                return prev.filter((id) => id !== book._id);
               } else {
-                return [...prev, book.id];
+                return [...prev, book._id];
               }
             });
           } else {
-            navigate(`/book/${book.id}`);
+            navigate(`/book/${book._id}`);
           }
         }
       }}
@@ -355,7 +455,6 @@ export const BookItem = ({ book, isEdit, selectedBooks, setSelectedBooks, closeE
             type="text"
             name="title"
             defaultValue={book.title}
-            autoFocus
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => {
               e.stopPropagation();
@@ -370,13 +469,15 @@ export const BookItem = ({ book, isEdit, selectedBooks, setSelectedBooks, closeE
             onChange={(e) => {
               const newTitle = (e.target as HTMLInputElement).value.trim();
               if (newTitle === book.title) return;
-              setUpdatedBooks((prev) => [...prev, book.id]);
-              setBooks((prev) => prev.map((b) => (b.id === book.id ? { ...b, title: newTitle } : b)));
+              setRenamedBooks((prev) => [...prev, book._id]);
+              setBooks((prev) => prev.map((b) => (b._id === book._id ? { ...b, title: newTitle } : b)));
             }}
             className="w-full text-xs text-center border border-gray-300 bg-white rounded-md px-3 py-2 focus:outline-none focus:ring focus:border-blue-300 transition"
           />
         ) : (
-          <h3 className="font-medium w-full truncate">{book.title}</h3>
+          <h3 title={book.title} className="font-medium w-full truncate">
+            {book.title}
+          </h3>
         )}
 
         {!isEdit ? (
@@ -390,8 +491,22 @@ export const BookItem = ({ book, isEdit, selectedBooks, setSelectedBooks, closeE
         ) : (
           <div className="text-xs">Progress: {progress}%</div>
         )}
+
+        {book.source === 'web' && !isEdit && newChaptersCount ? (
+          <button
+            aria-label="has-new-chapter"
+            title="Has new chapters!"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleUpdateChapters(book._id);
+            }}
+            className="absolute bottom-1 right-1 rounded-full! shake-active bg-white text-amber-600"
+          >
+            <BellRing size={16} />
+          </button>
+        ) : null}
       </div>
-      {selectedBooks.includes(book.id) && <div className="select-mask absolute top-0 left-0 w-full h-full bg-gray-400/60" />}
+      {selectedBooks.includes(book._id) && <div className="select-mask absolute top-0 left-0 w-full h-full bg-gray-400/60" />}
     </div>
   );
 };

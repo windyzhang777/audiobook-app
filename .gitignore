@@ -4,8 +4,9 @@
 node_modules/
 
 # Build
-dist/
 build/
+dist/
+packages/*/dist
 
 # Native
 .kotlin/
@@ -42,3 +43,6 @@ yarn-error.*
 .env
 local.*
 packages/server/uploads
+
+# not ready
+packages/native

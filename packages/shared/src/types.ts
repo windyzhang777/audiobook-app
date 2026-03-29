@@ -1,6 +1,6 @@
-type BookSource = 'local' | 'cloud';
+type BookSource = 'local' | 'web';
 
-export type BookFileType = 'txt' | 'epub' | 'pdf' | 'mobi';
+export type BookFileType = 'txt' | 'epub' | 'pdf' | 'mobi' | 'web';
 
 export interface SpeechOptions {
   rate?: number;
@@ -22,13 +22,21 @@ export interface BookMark {
   text: string;
 }
 
+export interface Chapter {
+  title: string;
+  source: string; // line index for upload; URL for scraper
+  isLoaded: boolean;
+  startIndex?: number;
+}
+
 export interface Book {
-  id: string;
+  _id: string;
   userId: string;
   title: string;
   source: BookSource;
-  coverPath?: string;
   localPath: string;
+  coverPath?: string;
+  bookUrl?: string;
   fileType: BookFileType;
 
   currentLine: number;
@@ -38,6 +46,7 @@ export interface Book {
   lastReadAt?: string; // ISO string
   updatedAt: string; // ISO string
   lastCompleted?: string; // ISO string
+  chapters: Chapter[];
   bookmarks?: BookMark[];
 
   // setting for TTS per book
@@ -49,10 +58,14 @@ export interface BookContent {
   bookId: string;
   lines: string[];
   lang: string;
-  pagination: BookContentPagination;
+  pagination?: Pagination;
 }
 
-export interface BookContentPagination {
+export interface BookContentPaginated extends BookContent {
+  pagination: Pagination;
+}
+
+export interface Pagination {
   offset?: number;
   limit?: number;
   total: number;
@@ -74,4 +87,31 @@ export interface UpdateProgressRequest {
 
 export interface UploadBookResponse {
   book: Book;
+}
+
+export interface UploadProgress {
+  uploadedBytes: number;
+  totalBytes: number;
+  percentage: number;
+  currentChunk: number;
+  totalChunks: number;
+  speed: number; // bytes per second
+  estimatedTimeRemaining: number; // seconds
+}
+
+export interface ChunkedUploadConfig {
+  chunkSize: number; // bytes
+  maxParallel: number; // number of parallel chunk uploads
+  maxRetries: number; // retry attempts per chunk
+  onProgress?: (progress: UploadProgress) => void;
+  onChunkComplete?: (chunkIndex: number, totalChunks: number) => void;
+  onError?: (error: Error) => void;
+}
+
+export interface ChunkMetadata {
+  index: number;
+  start: number;
+  end: number;
+  size: number;
+  retries: number;
 }

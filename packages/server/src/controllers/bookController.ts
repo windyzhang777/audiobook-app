@@ -1,4 +1,4 @@
-import { fixEncoding, PAGE_SIZE } from '@audiobook/shared';
+import { Book, fixEncoding, PAGE_SIZE } from '@audiobook/shared';
 import { Request, Response } from 'express';
 import path from 'path';
 import { AudiobookService } from '../services/AudiobookService';
@@ -9,6 +9,112 @@ export class BookController {
     private bookService: BookService,
     private audiobookService: AudiobookService,
   ) {}
+
+  /**
+   * Scrape a book from a provided URL (e.g. xpxs.net)
+   */
+  scrapeWithProgress = async (req: Request, res: Response) => {
+    const { url } = req.query; // SSE uses query params
+    let bookTitle = '';
+
+    if (!url || typeof url !== 'string' || !url.startsWith('http')) {
+      return res.status(400).json({ message: 'Valid URL is required' });
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const onStatus = (message: string, title?: string) => {
+      if (title) bookTitle = title;
+      res.write(`data: ${JSON.stringify({ message, title: bookTitle })}\n\n`);
+    };
+    const onProgress = (current: number, total: number) => res.write(`data: ${JSON.stringify({ current, total, title: bookTitle })}\n\n`);
+    const onComplete = (book: Book) => res.write(`data: ${JSON.stringify({ complete: true, book })}\n\n`);
+    const onError = (message: string) => res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
+
+    onStatus('Connecting to source...');
+
+    try {
+      console.log(`Starting SSE scrape for: ${url}`);
+      const book = await this.bookService.scrapeWithProgress(url, onProgress, onStatus, onError);
+      onComplete(book);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Scraping failed';
+      onError(message);
+    } finally {
+      res.end();
+    }
+
+    // Handle client disconnect
+    req.on('close', () => {
+      console.log('Client disconnected from scrape stream');
+      if (!res.writableEnded) res.end();
+    });
+  };
+
+  checkUpdates = async (_: Request, res: Response) => {
+    try {
+      const updates = await this.bookService.checkAllForUpdates();
+      res.json(updates);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to check updates';
+      res.status(500).json({ message });
+    }
+  };
+
+  updateChapters = async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    try {
+      const updatedBook = await this.bookService.updateChapters(id as string);
+
+      if (!updatedBook) {
+        return res.status(404).json({ message: 'Book not found' });
+      }
+
+      res.json(updatedBook);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to refresh chapters';
+      res.status(500).json({ message });
+    }
+  };
+
+  hydrateChapter = async (req: Request, res: Response) => {
+    const { id, index } = req.params;
+
+    try {
+      const chapterIndex = parseInt(index as string, 10);
+      if (isNaN(chapterIndex)) {
+        return res.status(400).json({ message: 'Invalid chapter index' });
+      }
+
+      const updatedBook = await this.bookService.hydrateChapter(id as string, chapterIndex);
+      res.status(200).json(updatedBook);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Hydration failed';
+      res.status(500).json({ message });
+    }
+  };
+
+  reHydrateFromChapter = async (req: Request, res: Response) => {
+    const { id, index } = req.params;
+
+    try {
+      const chapterIndex = parseInt(index as string, 10);
+      if (isNaN(chapterIndex)) {
+        return res.status(400).json({ message: 'Invalid chapter index' });
+      }
+
+      const updatedBook = await this.bookService.reHydrateFromChapter(id as string, chapterIndex);
+      res.status(200).json(updatedBook);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Truncate and Re-hydration failed';
+      console.error(`[Controller] ${message}`, error);
+      res.status(500).json({ message });
+    }
+  };
 
   /**
    * Legacy upload (simple, for small files < 1MB)
@@ -27,8 +133,8 @@ export class BookController {
       const baseName = path.basename(req.file.originalname, path.extname(req.file.originalname));
       const cleanTitle = fixEncoding(baseName);
 
-      this.bookService.checkExisting(cleanTitle, req.file.path);
-      const book = await this.bookService.upload(req.file.path, fileType, cleanTitle);
+      await this.bookService.checkExisting(cleanTitle, req.file.path);
+      const book = await this.bookService.upload(cleanTitle, req.file.path, fileType);
 
       res.status(201).json(book);
     } catch (error) {
@@ -37,13 +143,13 @@ export class BookController {
     }
   };
 
-  getAll = (_req: Request, res: Response) => {
-    const books = this.bookService.getAll();
+  getAll = async (_req: Request, res: Response) => {
+    const books = await this.bookService.getAll();
     res.json(books);
   };
 
-  getById = (req: Request, res: Response) => {
-    const book = this.bookService.getById(req.params.id as string);
+  getById = async (req: Request, res: Response) => {
+    const book = await this.bookService.getById(req.params.id as string);
     if (!book) {
       return res.status(404).json({ message: 'Book not found' });
     }
@@ -69,14 +175,14 @@ export class BookController {
     }
   };
 
-  getContent = (req: Request, res: Response) => {
+  getContent = async (req: Request, res: Response) => {
     const { id } = req.params;
     // Parse pagination params from query (e.g., ?offset=0&limit=50)
     const offset = parseInt(req.query.offset as string) || 0;
     const limit = parseInt(req.query.limit as string) || PAGE_SIZE;
 
     try {
-      const content = this.bookService.getContent(id as string, offset, limit);
+      const content = await this.bookService.getContent(id as string, offset, limit);
       res.json(content);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error retrieving book content';
@@ -84,7 +190,7 @@ export class BookController {
     }
   };
 
-  search = (req: Request, res: Response) => {
+  search = async (req: Request, res: Response) => {
     const { id } = req.params;
     const query = req.query.q as string;
 
@@ -93,7 +199,7 @@ export class BookController {
     }
 
     try {
-      const matches = this.bookService.search(id as string, query);
+      const matches = await this.bookService.search(id as string, query);
 
       res.json({ count: matches.length, indices: matches });
     } catch (error) {
@@ -102,9 +208,9 @@ export class BookController {
     }
   };
 
-  update = (req: Request, res: Response) => {
+  updateBook = async (req: Request, res: Response) => {
     try {
-      const updatedBook = this.bookService.update(req.params.id as string, {
+      const updatedBook = await this.bookService.updateBook(req.params.id as string, {
         ...req.body,
         lastReadAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -116,12 +222,12 @@ export class BookController {
     }
   };
 
-  deleteContent = (req: Request, res: Response) => {
+  deleteContent = async (req: Request, res: Response) => {
     const { id } = req.params;
     const lineIndex = parseInt(req.query.line as string);
 
     try {
-      this.bookService.deleteContent(id as string, lineIndex);
+      await this.bookService.deleteContent(id as string, lineIndex);
       res.status(204).send();
     } catch (error) {
       const message = error instanceof Error ? error.message : `Error deleting line ${lineIndex} from book`;
@@ -129,9 +235,9 @@ export class BookController {
     }
   };
 
-  delete = (req: Request, res: Response) => {
+  delete = async (req: Request, res: Response) => {
     try {
-      this.bookService.delete(req.params.id as string);
+      await this.bookService.delete(req.params.id as string);
       res.status(204).send();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error deleting book';

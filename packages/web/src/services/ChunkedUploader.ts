@@ -1,33 +1,4 @@
-import { sleep, type Book } from '@audiobook/shared';
-
-export interface UploadProgress {
-  uploadedBytes: number;
-  totalBytes: number;
-  percentage: number;
-  currentChunk: number;
-  totalChunks: number;
-  speed: number; // bytes per second
-  estimatedTimeRemaining: number; // seconds
-}
-
-export interface ChunkedUploadConfig {
-  chunkSize: number; // bytes
-  maxParallel: number; // number of parallel chunk uploads
-  maxRetries: number; // retry attempts per chunk
-  onProgress?: (progress: UploadProgress) => void;
-  onChunkComplete?: (chunkIndex: number, totalChunks: number) => void;
-  onError?: (error: Error) => void;
-}
-
-interface ChunkMetadata {
-  index: number;
-  start: number;
-  end: number;
-  size: number;
-  retries: number;
-}
-
-export const UPLOAD_CHUNK_SIZE = 1 * 1024 * 1024; // 1MB
+import { sleep, UPLOAD_CHUNK_SIZE, type Book, type ChunkedUploadConfig, type ChunkMetadata, type UploadProgress } from '@audiobook/shared';
 
 export class ChunkedUploader {
   private file: File;

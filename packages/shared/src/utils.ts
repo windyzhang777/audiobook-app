@@ -11,7 +11,30 @@ export const getFileTitle = (fileName: string) => {
   return { title, fileType };
 };
 
-export const fixEncoding = (str: string): string => Buffer.from(str, 'latin1').toString('utf8');
+export const fixEncoding = (str: string): string => {
+  try {
+    // Handle URL encoding (%E6...)
+    let decoded = str;
+    if (str.includes('%')) {
+      decoded = decodeURIComponent(str);
+    }
+
+    // Check if the string is "Mojibake" (Binary data read as Latin-1)
+    // If it has characters like 'ç' or 'å', it needs a binary repair.
+    const isMojibake = /[À-ÿ]/.test(decoded) && !/[\u4e00-\u9fa5]/.test(decoded);
+
+    if (isMojibake) {
+      // Re-interpret the string as UTF-8 bytes
+      const bytes = Uint8Array.from(decoded, (c) => c.charCodeAt(0));
+      return new TextDecoder('utf-8').decode(bytes);
+    }
+
+    return decoded;
+  } catch (error) {
+    console.error('Encoding fix failed:', error);
+    return str;
+  }
+};
 
 export const isValidFileType = (fileType: string): boolean => {
   const validTypes: BookFileType[] = ['txt', 'epub', 'pdf', 'mobi'];

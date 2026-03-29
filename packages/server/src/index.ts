@@ -1,6 +1,7 @@
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express, { NextFunction, Request, Response } from 'express';
+import mongoose from 'mongoose';
 import path from 'path';
 import { BookController } from './controllers/bookController';
 import { UploadController } from './controllers/uploadController';
@@ -9,6 +10,7 @@ import { bookRoutes } from './routes/bookRoutes';
 import { uploadRoutes } from './routes/uploadRoutes';
 import { AudiobookService } from './services/AudiobookService';
 import { BookService } from './services/bookService';
+import { ScraperService } from './services/ScraperService';
 import { TextProcessorService } from './services/textProcessorService';
 import { TTSGoogle } from './services/TTSService';
 import { UploadService } from './services/uploadService';
@@ -29,9 +31,10 @@ app.use('/uploads', express.static(uploadsDir));
 // Instances
 const bookRepository = new BookRepository();
 const textProcessorService = new TextProcessorService();
+const scraperService = new ScraperService();
 const ttsService = new TTSGoogle();
 const audiobookService = new AudiobookService(bookRepository, ttsService);
-const bookService = new BookService(bookRepository, textProcessorService);
+const bookService = new BookService(bookRepository, textProcessorService, scraperService);
 const bookController = new BookController(bookService, audiobookService);
 const uploadService = new UploadService();
 const uploadController = new UploadController(uploadService, bookService);
@@ -61,8 +64,20 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 export default app;
 
 // Start server
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
-    console.log(`Audiobook server is running on http://localhost:${PORT}`);
-  });
-}
+const startServer = async () => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/audiobook-app');
+    console.log('✅ MongoDB connected');
+
+    if (process.env.NODE_ENV !== 'production') {
+      app.listen(PORT, () => {
+        console.log(`🚀 Audiobook server running on http://localhost:${PORT}`);
+      });
+    }
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();

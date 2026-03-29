@@ -1,3 +1,4 @@
+import { ALL_LINES } from '@/constants';
 import { createWriteStream } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
@@ -18,7 +19,7 @@ export class AudiobookService {
    * Best for "On-Demand" streaming to save on Google Cloud costs.
    */
   async getAudioForLine(bookId: string, lineIndex: number): Promise<Buffer> {
-    const content = this.bookRepository.getContent(bookId);
+    const content = await this.bookRepository.getContent(bookId, 0, ALL_LINES);
     if (!content || !content.lines[lineIndex]) {
       throw new Error('Line not found');
     }
@@ -34,7 +35,7 @@ export class AudiobookService {
    * Pre-generates the entire audiobook (Long running task)
    */
   async processFullAudiobook(bookId: string) {
-    const content = this.bookRepository.getContent(bookId);
+    const content = await this.bookRepository.getContent(bookId, 0, ALL_LINES);
     if (!content) throw new Error('Book content not found');
 
     const audioFileName = `${bookId}.mp3`;
@@ -57,7 +58,7 @@ export class AudiobookService {
       }
 
       await new Promise((resolve) => writeStream.end(resolve));
-      this.bookRepository.update(bookId, { audioPath });
+      await this.bookRepository.updateBook(bookId, { audioPath });
     } catch (error) {
       writeStream.destroy();
       try {

@@ -1,8 +1,117 @@
-import { ChunkedUploader, UPLOAD_CHUNK_SIZE, type ChunkedUploadConfig } from '@/services/ChunkedUploader';
-import { type Book, type BookContent } from '@audiobook/shared';
+import type { ScrapeProgress } from '@/common/useScrape';
+import { ChunkedUploader } from '@/services/ChunkedUploader';
+import { UPLOAD_CHUNK_SIZE, type Book, type BookContentPaginated, type ChunkedUploadConfig } from '@audiobook/shared';
 
 export const api = {
   books: {
+    /**
+     * Scrape a book from a web URL (e.g., xpxs.net)
+     */
+    scrape: (url: string, onProgress: (progress: ScrapeProgress) => void, onComplete: (book: Book) => void, onError: (error: string) => void) => {
+      const eventSource = new EventSource(`/api/books/scrape?url=${encodeURIComponent(url)}`);
+
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.error) {
+          onError(data.error);
+          eventSource.close();
+        } else if (data.complete) {
+          onComplete(data.book);
+          eventSource.close();
+        } else if (data.message) {
+          onProgress({
+            message: data.message, // "Gathering chapters..."
+            title: data.title,
+            percentage: 0,
+            uploadedBytes: 0,
+            totalBytes: 0,
+            currentChunk: 0,
+            totalChunks: 0,
+            speed: 0,
+            estimatedTimeRemaining: 0,
+          });
+        } else {
+          onProgress({
+            message: data.title,
+            title: data.title,
+            percentage: (data.current / data.total) * 100,
+            uploadedBytes: data.current,
+            totalBytes: data.total,
+            currentChunk: data.current,
+            totalChunks: data.total, // Total chapters
+            speed: 0,
+            estimatedTimeRemaining: 0,
+          });
+        }
+      };
+
+      eventSource.onerror = () => {
+        onError('Connection to scraping server lost.');
+        eventSource.close();
+      };
+
+      return () => eventSource.close();
+    },
+
+    hydrateChapter: async (_id: string, chapterIndex: number): Promise<Book | null> => {
+      const response = await fetch(`/api/books/${_id}/hydrate/${chapterIndex}`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const json = await response.json();
+        throw new Error(json.message || `Failed to hydrate for chapter ${chapterIndex} for book ${_id}`);
+      }
+
+      return response.json();
+    },
+
+    /**
+     * Truncates the book from this chapter index and re-fetches content and metadata.
+     */
+    reHydrateFromChapter: async (_id: string, chapterIndex: number): Promise<Book | null> => {
+      const response = await fetch(`/api/books/${_id}/rehydrate/${chapterIndex}`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const json = await response.json();
+        throw new Error(json.message || `Failed to re-hydrate from chapter ${chapterIndex}`);
+      }
+
+      return response.json();
+    },
+
+    /**
+     * Checks all web books for new chapters
+     * Returns a map of { [bookId: string]: numberOfNewChapters }
+     */
+    checkUpdates: async (): Promise<Record<string, number>> => {
+      const response = await fetch('/api/books/check-updates');
+
+      if (!response.ok) {
+        const json = await response.json();
+        throw new Error(json.message || 'Update check failed');
+      }
+
+      return response.json();
+    },
+
+    /**
+     * Refresh a specific book's chapter list
+     */
+    updateChapters: async (_id: string): Promise<Book> => {
+      const response = await fetch(`/api/books/${_id}/refresh`, { method: 'POST' });
+
+      if (!response.ok) {
+        const json = await response.json();
+        throw new Error(json.message || `Update chapters failed for book ${_id}`);
+      }
+
+      return response.json();
+    },
+
     /**
      * Legacy upload (simple, for small files < 1MB)
      */
@@ -33,8 +142,8 @@ export const api = {
       return response.json();
     },
 
-    getById: async (id: string): Promise<Book> => {
-      const response = await fetch(`/api/books/${id}`);
+    getById: async (_id: string): Promise<Book> => {
+      const response = await fetch(`/api/books/${_id}`);
 
       if (!response.ok) {
         const json = await response.json();
@@ -43,8 +152,8 @@ export const api = {
       return response.json();
     },
 
-    getContent: async (id: string, offset: number, limit: number): Promise<BookContent> => {
-      const response = await fetch(`/api/books/${id}/content?offset=${offset}&limit=${limit}`);
+    getContent: async (_id: string, offset: number, limit: number): Promise<BookContentPaginated> => {
+      const response = await fetch(`/api/books/${_id}/content?offset=${offset}&limit=${limit}`);
 
       if (!response.ok) {
         const json = await response.json();
@@ -53,8 +162,8 @@ export const api = {
       return response.json();
     },
 
-    search: async (id: string, query: string): Promise<{ count: number; indices: number[] }> => {
-      const response = await fetch(`/api/books/${id}/search?q=${query}`);
+    search: async (_id: string, query: string): Promise<{ count: number; indices: number[] }> => {
+      const response = await fetch(`/api/books/${_id}/search?q=${query}`);
 
       if (!response.ok) {
         const json = await response.json();
@@ -63,9 +172,9 @@ export const api = {
       return response.json();
     },
 
-    update: async (id: string, updates: Partial<Book>): Promise<Book> => {
+    update: async (_id: string, updates: Partial<Book>): Promise<Book> => {
       try {
-        const response = await fetch(`/api/books/${id}`, {
+        const response = await fetch(`/api/books/${_id}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -84,14 +193,14 @@ export const api = {
       }
     },
 
-    deleteLine: async (id: string, lineIndex: number) => {
-      await fetch(`/api/books/${id}/content?line=${lineIndex}`, {
+    deleteLine: async (_id: string, lineIndex: number) => {
+      await fetch(`/api/books/${_id}/content?line=${lineIndex}`, {
         method: 'DELETE',
       });
     },
 
-    delete: async (id: string) => {
-      await fetch(`/api/books/${id}`, {
+    delete: async (_id: string) => {
+      await fetch(`/api/books/${_id}`, {
         method: 'DELETE',
       });
     },

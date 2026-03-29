@@ -41,15 +41,20 @@ export const upload = multer({
 export const bookRoutes = (bookController: BookController) => {
   const router = Router();
 
+  router.get('/check-updates', bookController.checkUpdates);
+  router.get('/scrape', bookController.scrapeWithProgress);
   router.get('/', bookController.getAll);
   router.get('/:id', bookController.getById);
   router.get('/:id/audio/:lineIndex', bookController.getAudioForLine);
-  router.patch('/:id', bookController.update);
   router.get('/:id/content', bookController.getContent);
-  router.post('/upload', upload.single('file'), bookController.upload);
   router.get('/:id/search', bookController.search);
-  router.delete('/:id/content', bookController.deleteContent);
+  router.post('/upload', upload.single('file'), bookController.upload);
+  router.post('/:id/refresh', bookController.updateChapters);
+  router.post('/:id/hydrate/:index', bookController.hydrateChapter);
+  router.post('/:id/rehydrate/:index', bookController.reHydrateFromChapter);
+  router.patch('/:id', bookController.updateBook);
   router.delete('/:id', bookController.delete);
+  router.delete('/:id/content', bookController.deleteContent);
 
   return router;
 };

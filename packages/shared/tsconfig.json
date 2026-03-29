@@ -5,6 +5,7 @@
     "noEmit": false,
     "rootDir": "./src",
     "outDir": "./dist",
+    "lib": ["ESNext", "DOM"],
     "paths": { "@/*": ["./src/*"] },
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },

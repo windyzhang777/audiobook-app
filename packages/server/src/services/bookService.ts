@@ -1,9 +1,25 @@
-import { Book, BookContent, BookFileType } from '@audiobook/shared';
+import { ALL_LINES, Book, BookContent, BookFileType, Chapter, CHAPTER_PREFIX, CHAPTER_SIZE } from '@audiobook/shared';
 import fs from 'fs';
+import { writeFile } from 'fs/promises';
+import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { uploadsDir } from '../index';
 import { BookRepository } from '../repositories/book';
+import { ScraperService } from './ScraperService';
 import { TextProcessorService } from './textProcessorService';
+
+interface SaveBook {
+  _id: Book['_id'];
+  title: Book['title'];
+  source: Book['source'];
+  localPath: Book['localPath'];
+  coverPath?: Book['coverPath'];
+  bookUrl?: Book['bookUrl'];
+  fileType: Book['fileType'];
+  lines: BookContent['lines'];
+  chapters: Book['chapters'];
+  lang: BookContent['lang'];
+}
 
 export class BookService {
   private uploadsDir = uploadsDir;
@@ -11,91 +27,263 @@ export class BookService {
   constructor(
     private bookRepository: BookRepository,
     private textProcessorService: TextProcessorService,
+    private scraperService: ScraperService,
   ) {
     // Ensure temp directory exists
     this.ensureDirectories();
   }
 
-  getAll = () => {
-    return this.bookRepository.getAll();
+  getAll = async () => {
+    return await this.bookRepository.getAll();
   };
 
-  checkExisting = (bookTitle: string, filePath?: string) => {
-    const existingBooks = this.bookRepository.getAll();
-
-    const found = existingBooks.find((book) => book.title === bookTitle);
+  checkExisting = async (bookTitle: string, filePath?: string, onError?: (message: string) => boolean) => {
+    const found = await this.bookRepository.getByTitle(bookTitle);
     if (found) {
       if (filePath) this.deleteFile(filePath);
+      if (onError) {
+        onError?.('Book with the same title already exists');
+      }
       throw new Error('Book with the same title already exists');
     }
   };
 
-  upload = async (filePath: string, fileType: string, bookTitle: string) => {
-    let textContent: string;
-    let coverPath: string | undefined;
+  scrapeWithProgress = async (
+    url: string,
+    onProgress?: (current: number, total: number) => void,
+    onStatus?: (message: string, title?: string) => void,
+    onError?: (message: string) => boolean,
+  ): Promise<Book> => {
+    const bookId = uuidv4();
 
-    try {
-      const extraction = await this.textProcessorService.extractBookData(filePath, fileType);
-      textContent = extraction.text;
-      coverPath = extraction.coverPath ? `/uploads/${extraction.coverPath}` : undefined;
-    } catch (error) {
-      this.deleteFile(filePath);
-      throw new Error(`Failed to extract text from file: ${error}`);
-    }
+    // STAGE 1: Discovery - gets Title, Cover URL, and all chapter URLs
+    const { title, coverUrl, chapters } = await this.scraperService.discoverBook(url);
+    onStatus?.(`Found ${chapters.length} chapters for ${title}...`, title);
+    await this.checkExisting(title, url, onError);
 
-    const { lang, lines } = await this.textProcessorService.processBookText(textContent);
+    // Download cover Image
+    let coverPath = await this.downloadCover(bookId, coverUrl);
 
-    const now = new Date().toISOString();
-    const book: Book = {
-      id: uuidv4(),
-      userId: 'local-user',
-      title: bookTitle,
-      source: 'local',
-      coverPath,
-      localPath: filePath,
-      fileType: fileType as BookFileType,
-      currentLine: 0,
-      totalLines: lines.length,
-      createdAt: now,
-      updatedAt: now,
-    };
+    const book = await this.saveBookToRepository({
+      _id: bookId,
+      title,
+      source: 'web',
+      lines: [],
+      chapters,
+      lang: 'en-US',
+      localPath: '',
+      bookUrl: url,
+      fileType: 'web' as BookFileType,
+      coverPath: coverPath ? `/uploads/${coverPath}` : undefined,
+    });
 
-    this.bookRepository.add(book);
-
-    const content: BookContent = {
-      bookId: book.id,
-      lines,
-      lang,
-      pagination: {
-        total: lines.length,
-        hasMore: true,
-      },
-    };
-    this.bookRepository.setContent(book.id, content);
+    // STAGE 2: Initial Hydration - scrape the first batch of chapters immediately
+    const batchSize = Math.min(chapters.length, CHAPTER_SIZE);
+    onStatus?.(`Hydrating first ${batchSize} chapters...`);
+    await this.hydrateInitialChapters(bookId, chapters.slice(0, batchSize), onProgress);
 
     return book;
   };
 
-  getById = (id: string) => {
-    return this.bookRepository.getById(id);
+  hydrateChapter = async (bookId: string, chapterIndex: number): Promise<Book | null> => {
+    const book = await this.bookRepository.getById(bookId);
+    if (!book) throw new Error('Book not found');
+
+    const chapter = book?.chapters[chapterIndex];
+    if (!chapter) throw new Error('Chapter index out of bounds');
+
+    if (chapter?.isLoaded) {
+      console.log(`[JIT] Chapter ${chapterIndex + 1} already loaded, skipping.`);
+      return book;
+    }
+
+    console.log(`[JIT] Hydrating Chapter ${chapterIndex} / ${book?.chapters.length}: ${chapter.title}`);
+    await this.fetchAndSaveChapter(bookId, chapter, chapterIndex);
+
+    return await this.bookRepository.getById(bookId);
   };
 
-  getByTitle = (title: string) => {
-    return this.bookRepository.getByTitle(title);
+  reHydrateFromChapter = async (bookId: string, chapterIndex: number): Promise<Book | null> => {
+    console.log(`[Reset] Truncating book ${bookId} from chapter index ${chapterIndex}`);
+    await this.bookRepository.truncateFromIndex(bookId, chapterIndex);
+
+    const book = await this.bookRepository.getById(bookId);
+    if (!book) throw new Error('Book not found');
+
+    const chapter = book?.chapters[chapterIndex];
+    if (!chapter) throw new Error('Target chapter missing after truncate');
+
+    await this.fetchAndSaveChapter(bookId, chapter, chapterIndex);
+
+    return await this.updateChapters(bookId);
   };
 
-  update = (id: string, updates: Partial<Book>) => {
-    const updated = this.bookRepository.update(id, updates);
+  /**
+   * Core logic to fetch, format, and save a specific chapter.
+   */
+  private fetchAndSaveChapter = async (bookId: string, chapter: Chapter, index: number): Promise<void> => {
+    // 1. Scrape content
+    const { lines } = await this.scraperService.scrapeSingleChapter(chapter.source);
+
+    // 2. Format: Add chapter title prefix
+    lines.unshift(`${CHAPTER_PREFIX}${chapter.title.toUpperCase()}`);
+
+    // 3. Persist: Order is critical (update metadata first to set correct startIndex)
+    await this.bookRepository.updateChapter(bookId, index);
+    await this.bookRepository.appendLines(bookId, lines);
+    await this.bookRepository.syncTotalLines(bookId);
+  };
+
+  /**
+   * Scrapes the first batch of chapters immediately on init
+   */
+  private hydrateInitialChapters = async (bookId: string, chapters: Chapter[], onProgress?: (current: number, total: number) => void) => {
+    let lang: string | undefined;
+
+    for (let i = 0; i < chapters.length; i++) {
+      const chapter = chapters[i];
+      const { lines } = await this.scraperService.scrapeSingleChapter(chapter.source);
+      const chapterTitle = chapters[i].title;
+      lines.unshift(`${CHAPTER_PREFIX}${chapterTitle.toUpperCase()}`);
+
+      if (i === 0) {
+        const sampleText = lines.slice(0, 10).join(' ');
+        lang = this.textProcessorService.detectLanguage(sampleText);
+      }
+
+      await this.bookRepository.updateChapter(bookId, i);
+      await this.bookRepository.appendLines(bookId, lines, lang);
+      await this.bookRepository.syncTotalLines(bookId);
+
+      if (onProgress) onProgress(i + 1, chapters.length);
+      console.log(`[${i + 1}/${chapters.length}] Scraped: ${chapters[i].source} ${chapters[i].title} (lines + ${lines.length})`);
+    }
+  };
+
+  async checkAllForUpdates(): Promise<Record<string, number>> {
+    const allBooks = await this.bookRepository.getAll();
+    const webBooks = allBooks.filter((b) => b.source === 'web' && b.bookUrl);
+
+    const updatesNeeded: Record<string, number> = {};
+
+    await Promise.all(
+      webBooks.map(async (book) => {
+        try {
+          const { chapters: latestChapters } = await this.scraperService.discoverBook(book.bookUrl!);
+
+          if (latestChapters.length > book.chapters.length) {
+            updatesNeeded[book._id] = latestChapters.length - book.chapters.length;
+          }
+        } catch (e) {
+          console.error(`Failed to check update for ${book.title}`);
+        }
+      }),
+    );
+
+    return updatesNeeded;
+  }
+
+  async updateChapters(bookId: string) {
+    const book = await this.bookRepository.getById(bookId);
+    if (!book || book.source !== 'web' || !book.bookUrl) return book;
+
+    const { chapters } = await this.scraperService.discoverBook(book.bookUrl);
+
+    const existingUrls = new Set(book.chapters.map((c) => c.source));
+    const newChapters = chapters.filter((c) => !existingUrls.has(c.source));
+
+    if (newChapters.length > 0) {
+      const firstNew = newChapters[0].title;
+      const lastNew = newChapters.at(-1)?.title;
+      console.log(`✨ Found ${newChapters.length} new chapters: [${firstNew}] to [${lastNew}]`);
+
+      await this.bookRepository.appendChapters(bookId, newChapters);
+    }
+
+    return await this.bookRepository.getById(bookId);
+  }
+
+  upload = async (bookTitle: string, filePath: string, fileType: string) => {
+    try {
+      const bookId = path.basename(filePath, path.extname(filePath));
+      const { lang, lines, chapters, coverPath: extractedCover } = await this.textProcessorService.processBookData(bookId, bookTitle, filePath, fileType);
+      const coverPath = extractedCover ? `/uploads/${extractedCover}` : undefined;
+
+      return this.saveBookToRepository({
+        _id: bookId,
+        title: bookTitle,
+        source: 'local',
+        lines,
+        chapters,
+        lang,
+        localPath: filePath,
+        fileType: fileType as BookFileType,
+        coverPath,
+      });
+    } catch (error) {
+      this.deleteFile(filePath);
+      throw new Error(`Failed to extract text from file: ${error}`);
+    }
+  };
+
+  private saveBookToRepository = async ({ _id, title, source, lines, chapters, lang, localPath, coverPath, bookUrl, fileType }: SaveBook) => {
+    const now = new Date().toISOString();
+
+    const book: Book = {
+      _id,
+      userId: 'local-user',
+      title,
+      source,
+      localPath,
+      coverPath,
+      bookUrl,
+      fileType,
+      currentLine: 0,
+      totalLines: lines.length,
+      chapters,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await Promise.all([
+      this.bookRepository.addBook(book),
+      this.bookRepository.setContent(book._id, {
+        bookId: book._id,
+        lines,
+        lang,
+      }),
+    ]);
+
+    this.deleteFile(localPath);
+
+    return book;
+  };
+
+  getById = async (_id: string) => {
+    return await this.bookRepository.getById(_id);
+  };
+
+  getByTitle = async (title: string) => {
+    return await this.bookRepository.getByTitle(title);
+  };
+
+  updateBook = async (_id: string, updates: Partial<Book>) => {
+    const updated = await this.bookRepository.updateBook(_id, updates);
     if (!updated) {
-      throw new Error(`Book with ID ${id} not found`);
+      throw new Error(`Book with ID ${_id} not found`);
     }
     return updated;
   };
 
-  deleteContent = (id: string, lineIndex: number) => {
-    const content = this.bookRepository.getContent(id);
+  deleteContent = async (_id: string, lineIndex: number) => {
+    let book = await this.bookRepository.getById(_id);
+    if (!book) {
+      throw new Error(`Book with ID ${_id} not found`);
+    }
+
+    const content = await this.bookRepository.getContent(_id, 0, ALL_LINES);
     if (!content) {
-      throw new Error(`Content for book with ID ${id} not found`);
+      throw new Error(`Content for book with ID ${_id} not found`);
     }
 
     if (lineIndex < 0 || lineIndex >= content.lines.length) {
@@ -104,55 +292,42 @@ export class BookService {
 
     // Remove the specified line
     content.lines.splice(lineIndex, 1);
-    content.pagination.total = content.lines.length;
-    content.pagination.hasMore = lineIndex < content.lines.length;
 
-    this.bookRepository.setContent(id, content);
+    await this.bookRepository.updateBook(_id, { totalLines: content.lines.length });
+    await this.bookRepository.setContent(_id, content);
   };
 
-  delete = (id: string) => {
-    const found = this.bookRepository.getById(id);
+  delete = async (_id: string) => {
+    const found = await this.bookRepository.getById(_id);
     if (!found) {
-      throw new Error(`Book with ID ${id} not found`);
+      throw new Error(`Book with ID ${_id} not found`);
     }
 
     this.deleteFile(found.localPath);
-    return this.bookRepository.delete(id);
+    this.deleteFile(found.coverPath);
+
+    return await this.bookRepository.delete(_id);
   };
 
-  getContent = (id: string, offset: number, limit: number) => {
-    const fullContent = this.bookRepository.getContent(id);
-    if (!fullContent) {
-      throw new Error(`Content for book with ID ${id} not found`);
-    }
-
-    // Slice the lines array to return only the requested batch
-    const paginatedLines = fullContent.lines.slice(offset, offset + limit);
-
-    return {
-      bookId: id,
-      lines: paginatedLines,
-      lang: fullContent.lang,
-      pagination: {
-        offset,
-        limit,
-        total: fullContent.lines.length,
-        hasMore: offset + limit < fullContent.lines.length,
-      },
-    };
-  };
-
-  search = (id: string, query: string) => {
-    const content = this.bookRepository.getContent(id);
+  getContent = async (_id: string, offset: number, limit: number) => {
+    const content = await this.bookRepository.getContent(_id, offset, limit);
     if (!content) {
-      throw new Error(`Content for book with ID ${id} not found`);
+      throw new Error(`Content for book with ID ${_id} not found`);
+    }
+    return content;
+  };
+
+  search = async (_id: string, query: string) => {
+    const content = await this.bookRepository.getContent(_id, 0, ALL_LINES);
+    if (!content) {
+      throw new Error(`Content for book with ID ${_id} not found`);
     }
 
     const normalizedQuery = query.toLowerCase();
     const matches: number[] = [];
 
     content.lines.forEach((line, index) => {
-      if (line.toLocaleLowerCase().includes(normalizedQuery)) {
+      if (line.toLowerCase().includes(normalizedQuery)) {
         matches.push(index);
       }
     });
@@ -160,15 +335,41 @@ export class BookService {
     return matches;
   };
 
-  private deleteFile = (filePath: string) => {
+  private downloadCover = async (bookId: string, coverUrl?: string): Promise<string | undefined> => {
+    if (!coverUrl) return undefined;
+
     try {
-      fs.unlinkSync(filePath);
+      const response = await fetch(coverUrl);
+      const buffer = Buffer.from(await response.arrayBuffer());
+
+      const extension = coverUrl.split('.').pop()?.split('?')[0] || 'jpg';
+      const fileName = `${bookId}.${extension}`;
+      const filePath = path.join(this.uploadsDir, fileName);
+
+      await writeFile(filePath, buffer);
+
+      return fileName;
     } catch (error) {
-      console.error(`Failed to delete file at ${filePath}:`, error);
+      console.error(`Failed to download cover from ${coverUrl}:`, error);
+      return undefined;
     }
   };
 
-  private ensureDirectories = () => {
+  // Since we are moving to MongoDB-only, we can eventually
+  // remove this, but for now, we clean up the temp upload file.
+  private deleteFile = async (rawPath: string | undefined) => {
+    if (!rawPath) return;
+
+    try {
+      const fileName = path.basename(rawPath);
+      const fullPath = path.join(this.uploadsDir, fileName);
+      fs.unlinkSync(fullPath);
+    } catch (error) {
+      console.error(`Failed to delete file at ${rawPath}:`, error);
+    }
+  };
+
+  private ensureDirectories = async () => {
     if (!fs.existsSync(this.uploadsDir)) {
       fs.mkdirSync(this.uploadsDir, { recursive: true });
     }

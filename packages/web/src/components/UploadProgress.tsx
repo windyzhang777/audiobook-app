@@ -1,6 +1,7 @@
+import type { ScrapeProgress } from '@/common/useScrape';
 import { api } from '@/services/api';
-import { ChunkedUploader, type UploadProgress } from '@/services/ChunkedUploader';
-import { formatBytes, formatTime } from '@audiobook/shared';
+import { ChunkedUploader } from '@/services/ChunkedUploader';
+import { formatBytes, formatTime, type UploadProgress } from '@audiobook/shared';
 import { AlertCircle, CircleCheck, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -52,11 +53,11 @@ export function UploadProgressDialog({ file, onComplete, onCancel }: UploadProgr
 
         setStatus('completed');
         setTimeout(() => {
-          onComplete?.(book.id);
+          onComplete?.(book._id);
         }, 1500);
-      } catch (err) {
+      } catch (error) {
         setStatus('error');
-        setError(err instanceof Error ? err.message : 'Upload failed');
+        setError(error instanceof Error ? error.message : 'Upload failed');
       }
     };
 
@@ -174,6 +175,27 @@ export function UploadProgressCompact({ progress }: { progress: UploadProgress }
         <span>
           {formatBytes(progress.uploadedBytes)} / {formatBytes(progress.totalBytes)}
         </span>
+        {progress.estimatedTimeRemaining > 0 && <span>{formatTime(progress.estimatedTimeRemaining)} left</span>}
+      </div>
+    </div>
+  );
+}
+
+export function ScrapeProgressCompact({ progress }: { progress: ScrapeProgress }) {
+  const safePercentage = isNaN(progress.percentage) ? 0 : Math.round(progress.percentage);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-gray-700 font-medium">{progress.totalChunks > 0 ? `Scraping Chapter ${progress.currentChunk + 1}...` : 'Starting...'}</span>
+      </div>
+
+      <div className="w-full bg-gray-200 rounded-full h-1.5">
+        <div className="bg-blue-600 h-1.5 rounded-full transition-all" style={{ width: `${safePercentage}%` }} />
+      </div>
+
+      <div className="flex justify-between text-xs text-gray-500">
+        {/* <span>{progress.totalChunks > 0 ? `${progress.currentChunk} / ${progress.totalChunks} Chapters` : 'Gathering chapter links...'}</span> */}
         {progress.estimatedTimeRemaining > 0 && <span>{formatTime(progress.estimatedTimeRemaining)} left</span>}
       </div>
     </div>
