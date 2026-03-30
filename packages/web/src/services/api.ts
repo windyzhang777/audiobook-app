@@ -132,6 +132,27 @@ export const api = {
       return response.json();
     },
 
+    updateWithCover: async (updates: Book, file: File | null): Promise<Book> => {
+      const formData = new FormData();
+
+      formData.append('title', updates.title || '');
+      formData.append('author', updates.author || '');
+      formData.append('coverPath', updates.coverPath || '');
+      if (file) formData.append('cover', file);
+
+      const response = await fetch(`/api/books/${updates._id}/upload`, {
+        method: 'PUT',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const json = await response.json();
+        throw new Error(json.message);
+      }
+
+      return response.json();
+    },
+
     getAll: async (): Promise<Book[]> => {
       const response = await fetch('/api/books');
 

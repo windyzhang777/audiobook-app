@@ -11,15 +11,16 @@ interface BookItemModalProps {
   book: Book;
   showModal: boolean;
   toggleCloseModal: () => void;
-  handleBookUpdate?: (selected: Book) => Promise<void>;
+  handleBookUpdateWithCover?: (selected: Book, file: File | null) => Promise<void>;
   handleBookDelete?: (selected: Book) => Promise<void>;
   handleBookMarkProgress?: (selected: Book) => Promise<void>;
   action?: Action;
 }
 
-export const BookItemDtoModal = ({ book, showModal, toggleCloseModal, handleBookUpdate }: BookItemModalProps) => {
+export const BookItemDtoModal = ({ book, showModal, toggleCloseModal, handleBookUpdateWithCover }: BookItemModalProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [newBook, setNewBook] = useState<Book>(book);
+  const [uploadingFile, setUploadingFile] = useState<File | null>(null);
 
   if (!newBook) return null;
 
@@ -62,9 +63,12 @@ export const BookItemDtoModal = ({ book, showModal, toggleCloseModal, handleBook
               accept="image/*"
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (file) {
-                  setNewBook((prev) => ({ ...prev, coverPath: `/uploads/${file.name}` }));
-                }
+                if (!file) return;
+
+                setUploadingFile(file);
+                const previewUrl = URL.createObjectURL(file);
+                setNewBook((prev) => ({ ...prev, coverPath: previewUrl }));
+                e.target.value = '';
               }}
             />
 
@@ -85,7 +89,7 @@ export const BookItemDtoModal = ({ book, showModal, toggleCloseModal, handleBook
             </Button>
           </DialogClose>
           <DialogClose asChild>
-            <Button type="submit" onClick={() => handleBookUpdate?.(newBook)}>
+            <Button type="submit" onClick={() => handleBookUpdateWithCover?.(newBook, uploadingFile)}>
               Ok
             </Button>
           </DialogClose>

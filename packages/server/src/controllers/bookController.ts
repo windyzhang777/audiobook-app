@@ -143,6 +143,28 @@ export class BookController {
     }
   };
 
+  updateWithCover = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const updates = { ...req.body };
+
+    try {
+      if (!id) {
+        return res.status(400).json({ message: 'Book ID is required' });
+      }
+
+      if (!updates) {
+        return res.status(400).json({ message: 'No updates provided' });
+      }
+
+      const updatedBook = await this.bookService.updateWithCover(id as string, updates, req.file?.path);
+
+      res.json(updatedBook);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error updating book cover';
+      return res.status(400).json({ message });
+    }
+  };
+
   getAll = async (_req: Request, res: Response) => {
     const books = await this.bookService.getAll();
     res.json(books);
@@ -215,6 +237,7 @@ export class BookController {
         lastReadAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
+
       res.json(updatedBook);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error updating book';

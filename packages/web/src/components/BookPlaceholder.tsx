@@ -5,7 +5,7 @@ interface BookPlaceholderProps {
 
 export const BookPlaceholder = ({ title, author }: BookPlaceholderProps) => (
   <div className="book-cover relative select-none w-full h-full font-[Open_Sans] bg-linear-to-b from-sky-950 to-gray-900 flex flex-col items-center pl-7 pr-5 py-8 text-center shadow-inner overflow-hidden">
-    <span className="text-xs uppercase font-semibold text-amber-100/90 leading-relaxed tracking-widest line-clamp-4 border-t border-b py-1 border-amber-400/40">
+    <span className="text-xs uppercase font-semibold text-amber-100/90 leading-relaxed tracking-widest line-clamp-4 border-t border-b py-1 w-full border-amber-400/40">
       {title} {author ? `(${author})` : ''}
     </span>
 

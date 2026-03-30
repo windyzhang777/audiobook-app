@@ -275,6 +275,38 @@ export class BookService {
     return updated;
   };
 
+  updateWithCover = async (_id: string, updates: Partial<Book>, filePath: string | undefined) => {
+    try {
+      let book = await this.bookRepository.getById(_id);
+      if (!book) {
+        await this.delete(_id);
+        throw new Error(`Book with ID ${_id} not found`);
+      }
+
+      // new upload
+      if (filePath) {
+        // delete old cover
+        if (book.coverPath) {
+          this.deleteFile(book.coverPath);
+        }
+        updates.coverPath = `/uploads/${_id}${path.extname(filePath)}`;
+      } else if (!updates.coverPath && book.coverPath) {
+        // user delete exisitng cover
+        this.deleteFile(book.coverPath);
+      }
+
+      const updated = await this.bookRepository.updateBook(_id, {
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      });
+
+      return updated;
+    } catch (error) {
+      this.deleteFile(filePath);
+      throw new Error(`Failed to update book cover: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   deleteContent = async (_id: string, lineIndex: number) => {
     let book = await this.bookRepository.getById(_id);
     if (!book) {

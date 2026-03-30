@@ -54,14 +54,14 @@ export const BookList = () => {
     setShowModal(false);
   };
 
-  const handleBookUpdate = async (selected: Book) => {
-    if (!selected?._id || action !== 'rename') return;
+  const handleBookUpdateWithCover = async (selected: Book, file: File | null) => {
+    if (!selected || action !== 'rename') return;
 
     try {
-      await api.books.update(selected._id, selected);
+      await api.books.updateWithCover(selected, file);
       loadBooks();
     } catch (error) {
-      console.error('Failed to update book: ', selected, error);
+      console.error('Failed to update book with cover: ', selected, error);
     } finally {
       setAction(null);
     }
@@ -287,7 +287,7 @@ export const BookList = () => {
         </div>
       )}
 
-      {selectedBook && action === 'rename' && <BookItemDtoModal book={selectedBook} showModal={showModal} toggleCloseModal={toggleCloseModal} handleBookUpdate={handleBookUpdate} />}
+      {selectedBook && action === 'rename' && <BookItemDtoModal book={selectedBook} showModal={showModal} toggleCloseModal={toggleCloseModal} handleBookUpdateWithCover={handleBookUpdateWithCover} />}
       {selectedBook && action === 'delete' && <BookItemConfirmDelete book={selectedBook} showModal={showModal} toggleCloseModal={toggleCloseModal} handleBookDelete={handleBookDelete} />}
       {selectedBook && (action === 'reset-progress' || action === 'mark-as-completed') && (
         <BookItemConfirmMarkProgress book={selectedBook} showModal={showModal} toggleCloseModal={toggleCloseModal} handleBookMarkProgress={handleBookMarkProgress} action={action} />

@@ -41,6 +41,11 @@ export const isValidFileType = (fileType: string): boolean => {
   return validTypes.some((type) => `.${type}`.includes(fileType.toLowerCase()));
 };
 
+export const isValidImageType = (fileType: string): boolean => {
+  const validTypes: string[] = ['jpeg', 'jpg', 'png', 'webp'];
+  return validTypes.some((type) => `.${type}`.includes(fileType.toLowerCase()));
+};
+
 export const sanitizeFileName = (fileName: string): string =>
   fileName
     .replace(/[^a-z0-9_\-\.]/gi, '_')

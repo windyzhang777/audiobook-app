@@ -19,6 +19,7 @@ interface EpubManifest extends TocElement {
 
 export class TextProcessorService {
   private uploadsDir = uploadsDir;
+  private coverPath: string = '';
 
   detectLanguage(text: string): string {
     const lang = franc(text, { minLength: 100 });
@@ -76,6 +77,7 @@ export class TextProcessorService {
         const allLines: string[] = [];
         let cumulativeLines = 0;
         const coverPath = await this.extractCover(epub, bookId);
+        if (coverPath) this.coverPath = coverPath;
 
         for (const chapter of epub.flow) {
           const html = await epub.getChapterRawAsync(chapter.id);
@@ -139,6 +141,7 @@ export class TextProcessorService {
 
         return { lang, lines: allLines, chapters, coverPath };
       } catch (error) {
+        if (this.coverPath) this.deleteFile(this.coverPath);
         throw new Error('Failed to parse EPUB: ', error || '');
       }
     }
@@ -177,4 +180,18 @@ export class TextProcessorService {
     }
     return undefined;
   }
+
+  // Since we are moving to MongoDB-only, we can eventually
+  // remove this, but for now, we clean up the temp upload file.
+  private deleteFile = async (rawPath: string | undefined) => {
+    if (!rawPath) return;
+
+    try {
+      const fileName = path.basename(rawPath);
+      const fullPath = path.join(this.uploadsDir, fileName);
+      fs.unlinkSync(fullPath);
+    } catch (error) {
+      console.error(`Failed to delete file at ${rawPath}:`, error);
+    }
+  };
 }

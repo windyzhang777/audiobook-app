@@ -1,4 +1,4 @@
-import { isValidFileType } from '@audiobook/shared';
+import { isValidFileType, isValidImageType, MAX_UPLOAD_SIZE } from '@audiobook/shared';
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
@@ -11,30 +11,47 @@ import { uploadsDir } from '../index';
  * Saves files to the 'uploads' directory with a unique filename
  * and filters by allowed book file types.
  */
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadsDir);
+
+export const uploadBook = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      cb(null, uploadsDir);
+    },
+    filename: (_req, file, cb) => {
+      const fileExt = path.extname(file.originalname);
+      cb(null, `${uuidv4()}${fileExt.toLowerCase()}`);
+    },
+  }),
+  fileFilter: (_req: any, file: Express.Multer.File, cb: (error: Error | null, acceptFile?: boolean) => void) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (isValidFileType(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type'));
+    }
   },
-  filename: (_req, file, cb) => {
-    const fileExt = path.extname(file.originalname);
-    cb(null, `${uuidv4()}${fileExt.toLowerCase()}`);
-  },
+  limits: { fileSize: MAX_UPLOAD_SIZE },
 });
 
-const fileFilter = (_req: any, file: Express.Multer.File, cb: (error: Error | null, acceptFile?: boolean) => void) => {
-  const ext = path.extname(file.originalname).toLowerCase();
-  if (isValidFileType(ext)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Invalid file type'));
-  }
-};
-
-export const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB
-
-export const upload = multer({
-  storage,
-  fileFilter,
+export const uploadImage = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      cb(null, uploadsDir);
+    },
+    filename: (req, file, cb) => {
+      const bookId = req.params.id;
+      const fileExt = path.extname(file.originalname);
+      cb(null, `${bookId}${fileExt.toLowerCase()}`);
+    },
+  }),
+  fileFilter: (_req: any, file: Express.Multer.File, cb: (error: Error | null, acceptFile?: boolean) => void) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (isValidImageType(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid image type'));
+    }
+  },
   limits: { fileSize: MAX_UPLOAD_SIZE },
 });
 
@@ -48,10 +65,11 @@ export const bookRoutes = (bookController: BookController) => {
   router.get('/:id/audio/:lineIndex', bookController.getAudioForLine);
   router.get('/:id/content', bookController.getContent);
   router.get('/:id/search', bookController.search);
-  router.post('/upload', upload.single('file'), bookController.upload);
+  router.post('/upload', uploadBook.single('file'), bookController.upload);
   router.post('/:id/refresh', bookController.updateChapters);
   router.post('/:id/hydrate/:index', bookController.hydrateChapter);
   router.post('/:id/rehydrate/:index', bookController.reHydrateFromChapter);
+  router.put('/:id/upload', uploadImage.single('cover'), bookController.updateWithCover);
   router.patch('/:id', bookController.updateBook);
   router.delete('/:id', bookController.delete);
   router.delete('/:id/content', bookController.deleteContent);
