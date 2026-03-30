@@ -7,6 +7,7 @@ const BookSchema = new Schema<Book>(
     _id: { type: String, default: () => uuidv4() },
     userId: { type: String, required: true, index: true },
     title: { type: String, required: true, index: true },
+    author: { type: String },
     source: { type: String, required: true }, // local | web
     localPath: String,
     coverPath: String,

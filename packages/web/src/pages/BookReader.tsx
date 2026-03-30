@@ -5,7 +5,7 @@ import { FEATURES } from '@/config/features';
 import { triggerSuccess } from '@/helper';
 import { api } from '@/services/api';
 import { speechService, type SpeechConfigs } from '@/services/SpeechService';
-import { calculateProgress, CHAPTER_PREFIX, PAGE_SIZE, type Book, type BookContent, type BookMark, type Chapter, type SpeechOptions, type TextOptions } from '@audiobook/shared';
+import { bookTitleWithAuthor, calculateProgress, CHAPTER_PREFIX, PAGE_SIZE, type Book, type BookContent, type BookMark, type Chapter, type SpeechOptions, type TextOptions } from '@audiobook/shared';
 import {
   ArrowBigDown,
   ArrowBigUp,
@@ -73,7 +73,7 @@ export const BookReader = () => {
   const [speechRate, setSpeechRate] = useState<NonNullable<SpeechOptions['rate']>>(1.0);
   const [voice, setVoice] = useState<VoiceOption['id']>();
   const [selectedVoice, setSelectedVoice] = useState<VoiceOption>(VOICE_FALLBACK);
-  const [lastCompleted, setLastCompleted] = useState<string>();
+  const [lastCompleted, setlastCompleted] = useState<string>();
   const [bookmarks, setBookmarks] = useState<BookMark[]>([]);
   const updatedBook: Partial<Book> = useMemo(
     () => ({
@@ -145,7 +145,8 @@ export const BookReader = () => {
   }, []);
 
   const updateViewIndex = useCallback(
-    (lineIndex: number, chapters: Chapter[] | undefined) => {
+    (lineIndex: number) => {
+      const chapters = book?.chapters;
       if (!chapters) return;
 
       const chapterIndex = getChapterIndex(lineIndex, chapters);
@@ -154,15 +155,15 @@ export const BookReader = () => {
         if (!isSearchJumping.current) toggleIndicatorMessage(renderChapterIndicator(chapters[chapterIndex]));
       }
     },
-    [getChapterIndex, currentChapter],
+    [book?.chapters, getChapterIndex, currentChapter],
   );
 
   const scrollToLine = useCallback(
-    (index: number, behavior: LocationOptions['behavior'] = 'smooth', chapters: Chapter[] | undefined = book?.chapters) => {
+    (index: number, behavior: LocationOptions['behavior'] = 'smooth') => {
       virtuosoRef.current?.scrollToIndex({ index, align: 'center', behavior, offset: 120 });
-      updateViewIndex(index, chapters);
+      updateViewIndex(index);
     },
-    [updateViewIndex, book?.chapters],
+    [updateViewIndex],
   );
 
   const toggleIndicatorMessage = (content: React.ReactNode) => {
@@ -202,19 +203,19 @@ export const BookReader = () => {
     clearSearch();
   };
 
-  const jumpToRead = (mode: ReadingMode = 'focus', chapters: Chapter[] | undefined = book?.chapters) => {
-    scrollToLine(currentLine, 'auto', chapters);
+  const jumpToRead = (mode: ReadingMode = 'focus') => {
+    scrollToLine(currentLine, 'auto');
     forceControl(false, mode);
   };
 
-  const jumpToIndex = async (lineIndex: number = currentLine, chapters: Chapter[] | undefined = book?.chapters) => {
-    if (!_id || !chapters) return;
+  const jumpToIndex = async (lineIndex: number | undefined) => {
+    if (!_id || lineIndex === undefined) return;
 
     isSearchJumping.current = true;
     if (lineIndex >= lines.length) {
       await loadMoreLines(0, lineIndex + PAGE_SIZE);
     }
-    scrollToLine(lineIndex, 'auto', chapters);
+    scrollToLine(lineIndex, 'auto');
     forceControl(true, 'user');
 
     setTimeout(() => {
@@ -249,7 +250,7 @@ export const BookReader = () => {
       setFontSize(book.settings?.fontSize || 18);
       setSpeechRate(book.settings?.rate || 1.0);
       setVoice(book.settings?.voice || VOICE_FALLBACK.id);
-      setLastCompleted(book.lastCompleted || undefined);
+      setlastCompleted(book.lastCompleted || undefined);
       setBookmarks(book.bookmarks || []);
 
       await loadBookContent(0, (book.currentLine || 0) + PAGE_SIZE);
@@ -370,7 +371,7 @@ export const BookReader = () => {
     };
     speechService.onBookCompleted = (date) => {
       if (!lastCompleted) triggerSuccess();
-      setLastCompleted(date);
+      setlastCompleted(date);
     };
 
     return () => {
@@ -502,7 +503,7 @@ export const BookReader = () => {
                 <ArrowLeft size={16} />
                 <LibraryBig size={16} />
               </button>
-              <h3 className="font-semibold">{book.title}</h3>
+              <h3 className="font-semibold">{bookTitleWithAuthor(book)}</h3>
             </header>
           ),
           List: forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ style, children, ...props }, ref) => (
@@ -571,7 +572,7 @@ export const BookReader = () => {
                 toggleBookmark(index, cleanLine);
               }}
               onDoubleClick={() => handleLineClick(index)}
-              className={`group relative cursor-pointer my-1 px-2 transition-colors duration-200 ease-in-out rounded-lg ${line.startsWith(CHAPTER_PREFIX) ? 'font-semibold italic uppercase tracking-widest' : ''} ${index === currentLine ? 'bg-amber-100 font-medium' : 'hover:bg-gray-50'} focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-opacity-50 ${isBookmarked ? 'border border-r-4 border-amber-400 pr-2' : 'border-r-4 border-transparent'}`}
+              className={`group relative cursor-pointer my-1 px-2 transition-colors duration-200 ease-in-out rounded-lg ${line.startsWith(CHAPTER_PREFIX) ? 'font-semibold italic text-center uppercase tracking-widest' : ''} ${index === currentLine ? 'bg-amber-100 font-medium' : 'hover:bg-gray-50'} focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-opacity-50 ${isBookmarked ? 'border border-r-4 border-amber-400 pr-2' : 'border-r-4 border-transparent'}`}
             >
               {searchText ? getHighlightedText(cleanLine, searchText) : cleanLine}
 
@@ -713,8 +714,9 @@ export const BookReader = () => {
               disabled={!book?.title || bookmarks.length === 0}
               onClick={() => {
                 if (!book?.title || bookmarks.length === 0) return;
-                if (!confirm(`Overwrite local bookmarks for ${book?.title}?`)) return;
-                saveBookmarksToLocal(book.title, bookmarks);
+                const titleWithAuthor = bookTitleWithAuthor(book);
+                if (!confirm(`Overwrite local bookmarks for ${titleWithAuthor}?`)) return;
+                saveBookmarksToLocal(titleWithAuthor, bookmarks);
               }}
               title="Save bookmarks to local"
             >
@@ -728,11 +730,12 @@ export const BookReader = () => {
               disabled={!book?.title}
               onClick={async () => {
                 if (!_id || !book?.title) return;
-                if (!confirm(`Import bookmarks for [${book?.title}] from last saved?`)) return;
-                const merged = await importBookmarksFromLocal(_id, book.title, bookmarks);
+                const titleWithAuthor = bookTitleWithAuthor(book);
+                if (!confirm(`Import bookmarks for ${titleWithAuthor} from last saved?`)) return;
+                const merged = await importBookmarksFromLocal(_id, titleWithAuthor, bookmarks);
                 if (!merged || merged.length === 0) return;
                 setBookmarks(merged);
-                alert(`Imported ${merged.length} bookmarks for ${book?.title}!`);
+                alert(`Imported ${merged.length} bookmarks for ${titleWithAuthor}!`);
                 setTimeout(() => {
                   console.log(`updatedBook, canUpdate :`, updatedBook, canUpdate);
                   flushUpdate();
@@ -794,7 +797,7 @@ export const BookReader = () => {
                     const updatedBook = await hydrateChapterByIndex(targetChapterIndex);
                     if (updatedBook) targetLineIndex = updatedBook.chapters[targetChapterIndex].startIndex;
                   }
-                  jumpToIndex(targetLineIndex ?? 0, book.chapters);
+                  jumpToIndex(targetLineIndex);
                 }}
                 className="cursor-pointer text-center text-transparent bg-transparent py-1 w-6!"
               >
@@ -820,7 +823,7 @@ export const BookReader = () => {
               onClick={() => {
                 if (isPlaying) isUserFocusRef.current = true;
                 const targetChapterIndex = Math.min(currentChapter + 1, book.chapters.length - 1);
-                jumpToIndex(book.chapters[targetChapterIndex].startIndex, book.chapters);
+                jumpToIndex(book.chapters[targetChapterIndex].startIndex);
               }}
               title="Next chapter"
             >

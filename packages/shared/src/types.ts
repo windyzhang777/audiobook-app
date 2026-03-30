@@ -33,6 +33,7 @@ export interface Book {
   _id: string;
   userId: string;
   title: string;
+  author?: string;
   source: BookSource;
   localPath: string;
   coverPath?: string;

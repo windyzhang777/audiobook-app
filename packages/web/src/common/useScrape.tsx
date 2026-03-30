@@ -7,7 +7,7 @@ export interface ScrapeProgress extends UploadProgress {
   message?: string;
 }
 
-export function useScrape(closeEdit: () => void, loadBooks: () => Promise<void>) {
+export function useScrape(loadBooks: () => Promise<void>) {
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [scrapeUrl, setScrapeUrl] = useState('');
   const [isScraping, setIsScraping] = useState(false);
@@ -17,14 +17,12 @@ export function useScrape(closeEdit: () => void, loadBooks: () => Promise<void>)
   const stopScrapeRef = useRef<(() => void) | null>(null);
 
   const toggleUrlInput = () => {
-    closeEdit();
     setShowUrlInput(!showUrlInput);
   };
 
   const handleScrape = async () => {
     if (!scrapeUrl.trim() || !scrapeUrl.startsWith('http')) return;
 
-    closeEdit();
     setIsScraping(true);
     setShowUrlInput(false);
     setScrapeProgress({

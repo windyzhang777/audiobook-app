@@ -6,7 +6,7 @@ import { useDebounceCallback } from './useDebounceCallback';
 export function useSearchBook(
   id: string | undefined,
   currentLine: number,
-  jumpToIndex: (lineIndex?: number) => Promise<void>,
+  jumpToIndex: (lineIndex: number | undefined) => Promise<void>,
   forceControl: (isUserControl?: boolean, readingMode?: ReadingMode) => void,
 ) {
   const [searchText, setSearchText] = useState<string>('');

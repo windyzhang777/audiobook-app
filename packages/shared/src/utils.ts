@@ -1,4 +1,4 @@
-import type { BookFileType } from './types';
+import type { Book, BookFileType } from './types';
 
 // \p{L} matches any letter from any language
 // \p{N} matches any kind of numeric character
@@ -47,6 +47,12 @@ export const sanitizeFileName = (fileName: string): string =>
     .replace(/_+/g, '_')
     .replace(/_\./g, '.')
     .replace(/^_+|_+$/g, '');
+
+export const bookTitleWithAuthor = (book: Book) => {
+  return book.author ? `${book.title}(${book.author})` : book.title;
+};
+
+export const kebabToTitle = (str: string | undefined) => (str ? str.replace(/^[a-z]/, (match) => match.toUpperCase()).replace(/-/g, ' ') : str);
 
 export const calculateProgress = (currentLine: number, totalLines: number): number => {
   if (totalLines === 0) return 0;
