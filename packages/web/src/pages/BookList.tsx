@@ -148,7 +148,7 @@ export const BookList = () => {
               id="upload"
               aria-label="upload"
               type="file"
-              accept=".txt,.epub"
+              accept=".txt,.epub,.pdf"
               tabIndex={0}
               disabled={loading || isScraping}
               onChange={handleUpload}

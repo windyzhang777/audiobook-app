@@ -4,6 +4,7 @@ import { TocElement } from 'epub2/lib/epub/const';
 import { franc } from 'franc';
 import fs from 'fs';
 import path from 'path';
+import { extractText, getDocumentProxy } from 'unpdf';
 import { uploadsDir } from '../index';
 
 export interface ProcessedBook {
@@ -223,6 +224,21 @@ export class TextProcessorService {
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.error(`❌ [EPUB Parser Error] ${errorMsg}`, { fileType, bookId });
         throw new Error(`Failed to parse EPUB: ${errorMsg}`);
+      }
+    }
+
+    if (fileType === 'pdf') {
+      try {
+        const buffer = fs.readFileSync(filePath);
+        const pdf = await getDocumentProxy(new Uint8Array(buffer));
+        const { text } = await extractText(pdf, { mergePages: true });
+
+        const { lang, lines } = await this.processBookText(text);
+        return { lang, lines, chapters: [{ title, source: '0', isLoaded: true, startIndex: 0 }] };
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(`❌ [PDF Parser Error] ${errorMsg}`, { bookId });
+        throw new Error(`Failed to parse PDF: ${errorMsg}`);
       }
     }
 
