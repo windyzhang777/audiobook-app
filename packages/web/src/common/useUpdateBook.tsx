@@ -10,7 +10,7 @@ export function useUpdateBook(id: string | undefined, updatedBook: Partial<Book>
       await api.books.update(id, updatedBook);
       setBook((prev) => (prev ? { ...prev, ...updatedBook } : prev));
     } catch (error) {
-      console.error('Failed to update book: ', updatedBook, error);
+      console.error('❌ Failed to update book: ', updatedBook, error);
     }
   };
 

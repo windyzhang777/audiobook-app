@@ -79,7 +79,7 @@ export class ScraperService {
         return { lines, nextPath };
       });
     } catch (error) {
-      console.error(`Error scraping ${url}:`, error);
+      console.error(`❌ Error scraping ${url}:`, error);
       return { lines: [], nextPath: null };
     } finally {
       await page.close();

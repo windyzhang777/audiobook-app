@@ -84,9 +84,7 @@ export const BookItemDtoModal = ({ book, showModal, toggleCloseModal, handleBook
         </div>
         <DialogFooter className="sm:justify-end">
           <DialogClose asChild>
-            <Button type="button" variant="secondary">
-              Close
-            </Button>
+            <Button type="button">Close</Button>
           </DialogClose>
           <DialogClose asChild>
             <Button type="submit" onClick={() => handleBookUpdateWithCover?.(newBook, uploadingFile)}>
@@ -111,9 +109,7 @@ export const BookItemConfirmDelete = ({ book, showModal, toggleCloseModal, handl
 
         <DialogFooter className="sm:justify-end [&>button]:w-16">
           <DialogClose asChild>
-            <Button type="button" variant="secondary">
-              Close
-            </Button>
+            <Button type="button">Close</Button>
           </DialogClose>
           <DialogClose asChild>
             <Button type="submit" onClick={() => handleBookDelete?.(book)}>
@@ -140,9 +136,7 @@ export const BookItemConfirmMarkProgress = ({ book, showModal, toggleCloseModal,
 
         <DialogFooter className="sm:justify-end [&>button]:w-16">
           <DialogClose asChild>
-            <Button type="button" variant="secondary">
-              Close
-            </Button>
+            <Button type="button">Close</Button>
           </DialogClose>
           <DialogClose asChild>
             <Button type="submit" onClick={() => handleBookMarkProgress?.(book)}>

@@ -27,6 +27,7 @@ export interface Chapter {
   source: string; // line index for upload; URL for scraper
   isLoaded: boolean;
   startIndex?: number;
+  href?: string;
 }
 
 export interface Book {
@@ -37,6 +38,7 @@ export interface Book {
   source: BookSource;
   localPath: string;
   coverPath?: string;
+  extractedImages?: Record<string, string>;
   bookUrl?: string;
   fileType: BookFileType;
 

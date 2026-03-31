@@ -57,7 +57,7 @@ export function useSaveToLocal() {
         .map(([text, index]) => ({ index, text }))
         .sort((a, b) => a.index - b.index);
     } catch (error) {
-      console.error('Failed to parse book from local:', error);
+      console.error('❌ Failed to parse book from local:', error);
     }
   };
 

@@ -1,5 +1,5 @@
 import type { VoiceOption } from '@/pages/BookReader';
-import { getNowISOString, type BookContent, type SpeechOptions } from '@audiobook/shared';
+import { getNowISOString, IMAGE_MARKER, type BookContent, type SpeechOptions } from '@audiobook/shared';
 import { TTSNative } from './TTSNative';
 
 export interface SpeechConfigs extends Omit<BookContent, 'pagination'>, SpeechOptions {
@@ -56,6 +56,15 @@ export class SpeechService {
       return;
     }
 
+    // Image Check
+    if (configs.lines[index].startsWith(IMAGE_MARKER)) {
+      // Skip image lines but trigger line end to update progress
+      const next = index + 1;
+      this.onLineEnd?.(next);
+      this.play(next, configs);
+      return;
+    }
+
     // Hardware keep-alive
     this.silentAudio.play().catch((e) => console.error('Audio play failed:', e));
 
@@ -91,9 +100,9 @@ export class SpeechService {
     this.cloudAudio.play().catch((e) => {
       // Check if it was interrupted by a new request (common when skipping lines)
       if (e.name !== 'AbortError') {
-        console.error('Cloud playback error:', e);
+        console.error('❌ Cloud playback error:', e);
       } else {
-        console.log('Cloud playback was interrupted by a new request');
+        console.log('❌ Cloud playback was interrupted by a new request');
       }
     });
   }
@@ -189,7 +198,7 @@ export class SpeechService {
           position: index,
         });
       } catch (error) {
-        console.error('Error updating position state:', error);
+        console.error('❌ Error updating position state:', error);
       }
     }
 

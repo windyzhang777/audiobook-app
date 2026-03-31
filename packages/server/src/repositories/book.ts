@@ -11,6 +11,7 @@ const BookSchema = new Schema<Book>(
     source: { type: String, required: true }, // local | web
     localPath: String,
     coverPath: String,
+    extractedImages: { type: Object, default: {} },
     bookUrl: String,
     fileType: String,
 
@@ -21,7 +22,7 @@ const BookSchema = new Schema<Book>(
     lastReadAt: String,
     updatedAt: { type: String, required: true },
     lastCompleted: String,
-    chapters: [{ title: String, source: String, isLoaded: Boolean, startIndex: Number }],
+    chapters: [{ title: String, source: String, isLoaded: Boolean, startIndex: Number, href: String }],
     bookmarks: [{ index: Number, text: String }],
     settings: { fontSize: Number, rate: Number, voice: String },
     audioPath: String,

@@ -5,7 +5,19 @@ import { FEATURES } from '@/config/features';
 import { triggerSuccess } from '@/helper';
 import { api } from '@/services/api';
 import { speechService, type SpeechConfigs } from '@/services/SpeechService';
-import { bookTitleWithAuthor, calculateProgress, CHAPTER_PREFIX, PAGE_SIZE, type Book, type BookContent, type BookMark, type Chapter, type SpeechOptions, type TextOptions } from '@audiobook/shared';
+import {
+  bookTitleWithAuthor,
+  calculateProgress,
+  CHAPTER_MARKER,
+  IMAGE_MARKER,
+  PAGE_SIZE,
+  type Book,
+  type BookContent,
+  type BookMark,
+  type Chapter,
+  type SpeechOptions,
+  type TextOptions,
+} from '@audiobook/shared';
 import {
   ArrowBigDown,
   ArrowBigUp,
@@ -256,7 +268,7 @@ export const BookReader = () => {
       await loadBookContent(0, (book.currentLine || 0) + PAGE_SIZE);
     } catch (error) {
       setError('Failed to load book');
-      console.error('Failed to load book: ', error);
+      console.error('❌ Failed to load book: ', error);
     } finally {
       setLoading(false);
     }
@@ -279,7 +291,7 @@ export const BookReader = () => {
           return updatedBook;
         }
       } catch (error) {
-        console.error(`Failed to hydrate chapter ${chapterIndex}:`, error);
+        console.error(`❌ Failed to hydrate chapter ${chapterIndex}:`, error);
       }
     },
     [_id, book, totalLines],
@@ -538,6 +550,11 @@ export const BookReader = () => {
         }}
         // Individual Line Item
         itemContent={(index, line) => {
+          if (line.startsWith(IMAGE_MARKER)) {
+            const imageUrl = line.substring(IMAGE_MARKER.length);
+            return <img key={index} src={`${import.meta.env.VITE_API_URL}${imageUrl}`} alt={`${book.title}-image-${index}`} className="w-full h-auto rounded-lg my-6 shadow-sm" />;
+          }
+
           const isBookmarked = bookmarks.some((b) => b.index === index);
 
           const isCurrentMatch = searchRes[currentMatch] === index;
@@ -559,7 +576,7 @@ export const BookReader = () => {
             );
           };
 
-          const cleanLine = line.startsWith(CHAPTER_PREFIX) ? line.substring(CHAPTER_PREFIX.length) : line;
+          const cleanLine = line.startsWith(CHAPTER_MARKER) ? line.substring(CHAPTER_MARKER.length) : line;
 
           return (
             <li
@@ -572,7 +589,7 @@ export const BookReader = () => {
                 toggleBookmark(index, cleanLine);
               }}
               onDoubleClick={() => handleLineClick(index)}
-              className={`group relative cursor-pointer my-1 px-2 transition-colors duration-200 ease-in-out rounded-lg ${line.startsWith(CHAPTER_PREFIX) ? 'font-semibold italic text-center uppercase tracking-widest' : ''} ${index === currentLine ? 'bg-amber-100 font-medium' : 'hover:bg-gray-50'} focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-opacity-50 ${isBookmarked ? 'border border-r-4 border-amber-400 pr-2' : 'border-r-4 border-transparent'}`}
+              className={`group relative cursor-pointer my-1 px-2 transition-colors duration-200 ease-in-out rounded-lg ${line.startsWith(CHAPTER_MARKER) ? 'font-semibold italic text-center uppercase tracking-widest' : ''} ${index === currentLine ? 'bg-amber-100 font-medium' : 'hover:bg-gray-50'} focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-opacity-50 ${isBookmarked ? 'border border-r-4 border-amber-400 pr-2' : 'border-r-4 border-transparent'}`}
             >
               {searchText ? getHighlightedText(cleanLine, searchText) : cleanLine}
 

@@ -33,7 +33,7 @@ export function useSearchBook(
       setCurrentMatch(nearestMatchIndex);
       jumpToIndex(indices[nearestMatchIndex]);
     } catch (error) {
-      console.error(error);
+      console.error('❌ Failed to search book:', error);
     }
   };
 

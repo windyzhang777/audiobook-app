@@ -12,7 +12,8 @@ export const TEN_MINUTES = 10 * 60 * 1000;
 export const ONE_HOUR = 60 * 60 * 1000;
 export const ONE_DAY = 24 * 60 * 60 * 1000;
 
-export const CHAPTER_PREFIX = '~~~'; // Used to identify chapter titles in the lines array
+export const CHAPTER_MARKER = '~~~'; // Used to identify chapter titles in the lines array
+export const IMAGE_MARKER = '[IMAGE_MARKER]';
 
 /**
  * Maps franc 3-letter ISO 639-3 code (e.g., 'cmn', 'eng') to 2-letter BCP 47 codes + region (e.g., 'en-US', 'zh-CN')

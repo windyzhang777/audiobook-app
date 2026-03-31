@@ -32,7 +32,7 @@ export class TTSGoogle {
       const [response] = await this.client.synthesizeSpeech(request);
       return response.audioContent;
     } catch (error) {
-      console.error(`TTS Synthesis Error for ${languageCode}:`, error);
+      console.error(`❌ TTS Synthesis Error for ${languageCode}:`, error);
       throw error;
     }
   }

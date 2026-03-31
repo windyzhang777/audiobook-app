@@ -31,7 +31,7 @@ export const fixEncoding = (str: string): string => {
 
     return decoded;
   } catch (error) {
-    console.error('Encoding fix failed:', error);
+    console.error(`❌ Failed to fix encoding for ${str}:`, error);
     return str;
   }
 };

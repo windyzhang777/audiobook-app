@@ -28,7 +28,7 @@ export const BookList = () => {
       const books = await api.books.getAll();
       setBooks(books);
     } catch (error) {
-      console.error('Failed to load books: ', error);
+      console.error('❌ Failed to load books: ', error);
     } finally {
       setLoading(false);
     }
@@ -61,7 +61,7 @@ export const BookList = () => {
       await api.books.updateWithCover(selected, file);
       loadBooks();
     } catch (error) {
-      console.error('Failed to update book with cover: ', selected, error);
+      console.error('❌ Failed to update book with cover: ', selected, error);
     } finally {
       setAction(null);
     }
@@ -74,7 +74,7 @@ export const BookList = () => {
       await api.books.delete(selected._id);
       loadBooks();
     } catch (error) {
-      console.error('Failed to delete book: ', selected, error);
+      console.error('❌ Failed to delete book: ', selected, error);
     } finally {
       setAction(null);
     }
@@ -87,7 +87,7 @@ export const BookList = () => {
       await api.books.update(selected._id, { ...selected, lastCompleted: action === 'mark-as-completed' ? new Date().toISOString() : '' });
       loadBooks();
     } catch (error) {
-      console.error('Failed to reset book progress: ', selected, error);
+      console.error('❌ Failed to reset book progress: ', selected, error);
     } finally {
       setAction(null);
     }
@@ -112,7 +112,7 @@ export const BookList = () => {
       const updatedChapterCountByBookId = await api.books.checkUpdates();
       setUpdatedBooks(updatedChapterCountByBookId);
     } catch (error) {
-      console.error('Failed to check for updates:', error);
+      console.error('❌ Failed to check for updates:', error);
     }
   }, []);
 
@@ -138,13 +138,14 @@ export const BookList = () => {
       </header>
 
       {/* Upload & Scrape Controls */}
-      <div className="flex flex-col gap-3 mb-6">
+      <div className="flex flex-col gap-3 mb-6 text-sm">
         <div className="flex gap-2">
           {/* File Upload */}
-          <label className="flex-1 flex justify-center items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl cursor-pointer hover:bg-blue-700 transition-colors shadow-sm">
+          <label className="flex-1 flex justify-center items-center gap-2 px-4 bg-primary text-primary-foreground hover:bg-primary/80 rounded-lg whitespace-nowrap cursor-pointer transition-colors shadow-sm">
             <Upload size={16} />
-            <span className="text-sm font-medium">Upload a new book (txt, epub)</span>
+            <span className="font-medium">Upload a new book (txt, epub)</span>
             <input
+              id="upload"
               aria-label="upload"
               type="file"
               accept=".txt,.epub"
@@ -159,15 +160,9 @@ export const BookList = () => {
           </label>
 
           {/* Toggle URL Input */}
-          <Button
-            variant="outline"
-            onClick={toggleUrlInput}
-            className={`flex-1 flex justify-center items-center gap-2 px-4 py-3 border-2 rounded-xl transition-all ${
-              showUrlInput ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-gray-200 text-gray-600 hover:border-gray-300'
-            }`}
-          >
+          <Button type="button" variant="outline" onClick={toggleUrlInput} className={`flex-1 flex justify-center items-center gap-2 px-4 py-3 border-2 rounded-xl transition-all`}>
             <LinkIcon size={18} />
-            <span className="text-sm font-medium">Import from URL</span>
+            <span className="font-medium">Import from URL</span>
           </Button>
         </div>
 
@@ -180,11 +175,11 @@ export const BookList = () => {
               placeholder="https://www.xpxs.net/book/<BOOK-ID>"
               value={scrapeUrl}
               onChange={(e) => setScrapeUrl(e.target.value)}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+              className="flex-1 px-4 py-2"
               disabled={isScraping}
               onKeyDown={(e) => e.key === 'Enter' && handleScrape()}
             />
-            <Button onClick={handleScrape} disabled={isScraping || !scrapeUrl} className="px-6 py-2 bg-blue-600 text-white rounded-xl font-medium text-sm disabled:bg-gray-400 flex items-center gap-2">
+            <Button onClick={handleScrape} disabled={isScraping || !scrapeUrl} className="px-6 py-2 flex items-center gap-2">
               {isScraping ? <Loader2 size={16} className="animate-spin" /> : 'Scrape'}
             </Button>
           </div>

@@ -1,4 +1,4 @@
-import { ALL_LINES, Book, BookContent, BookFileType, Chapter, CHAPTER_PREFIX, CHAPTER_SIZE } from '@audiobook/shared';
+import { ALL_LINES, Book, BookContent, BookFileType, Chapter, CHAPTER_MARKER, CHAPTER_SIZE } from '@audiobook/shared';
 import fs from 'fs';
 import { writeFile } from 'fs/promises';
 import path from 'path';
@@ -14,6 +14,7 @@ interface SaveBook {
   source: Book['source'];
   localPath: Book['localPath'];
   coverPath?: Book['coverPath'];
+  extractedImages?: Book['extractedImages'];
   bookUrl?: Book['bookUrl'];
   fileType: Book['fileType'];
   lines: BookContent['lines'];
@@ -126,7 +127,7 @@ export class BookService {
     const { lines } = await this.scraperService.scrapeSingleChapter(chapter.source);
 
     // 2. Format: Add chapter title prefix
-    lines.unshift(`${CHAPTER_PREFIX}${chapter.title.toUpperCase()}`);
+    lines.unshift(`${CHAPTER_MARKER}${chapter.title.toUpperCase()}`);
 
     // 3. Persist: Order is critical (update metadata first to set correct startIndex)
     await this.bookRepository.updateChapter(bookId, index);
@@ -144,7 +145,7 @@ export class BookService {
       const chapter = chapters[i];
       const { lines } = await this.scraperService.scrapeSingleChapter(chapter.source);
       const chapterTitle = chapters[i].title;
-      lines.unshift(`${CHAPTER_PREFIX}${chapterTitle.toUpperCase()}`);
+      lines.unshift(`${CHAPTER_MARKER}${chapterTitle.toUpperCase()}`);
 
       if (i === 0) {
         const sampleText = lines.slice(0, 10).join(' ');
@@ -175,7 +176,7 @@ export class BookService {
             updatesNeeded[book._id] = latestChapters.length - book.chapters.length;
           }
         } catch (e) {
-          console.error(`Failed to check update for ${book.title}`);
+          console.error(`❌ Failed to check update for ${book.title}`);
         }
       }),
     );
@@ -206,7 +207,7 @@ export class BookService {
   upload = async (bookTitle: string, filePath: string, fileType: string) => {
     try {
       const bookId = path.basename(filePath, path.extname(filePath));
-      const { lang, lines, chapters, coverPath: extractedCover } = await this.textProcessorService.processBookData(bookId, bookTitle, filePath, fileType);
+      const { lang, lines, chapters, coverPath: extractedCover, extractedImages } = await this.textProcessorService.processBookData(bookId, bookTitle, filePath, fileType);
       const coverPath = extractedCover ? `/uploads/${extractedCover}` : undefined;
 
       return this.saveBookToRepository({
@@ -219,6 +220,7 @@ export class BookService {
         localPath: filePath,
         fileType: fileType as BookFileType,
         coverPath,
+        extractedImages,
       });
     } catch (error) {
       this.deleteFile(filePath);
@@ -226,7 +228,7 @@ export class BookService {
     }
   };
 
-  private saveBookToRepository = async ({ _id, title, source, lines, chapters, lang, localPath, coverPath, bookUrl, fileType }: SaveBook) => {
+  private saveBookToRepository = async ({ _id, title, source, lines, chapters, lang, localPath, coverPath, extractedImages, bookUrl, fileType }: SaveBook) => {
     const now = new Date().toISOString();
 
     const book: Book = {
@@ -236,6 +238,7 @@ export class BookService {
       source,
       localPath,
       coverPath,
+      extractedImages,
       bookUrl,
       fileType,
       currentLine: 0,
@@ -337,6 +340,15 @@ export class BookService {
 
     this.deleteFile(found.localPath);
     this.deleteFile(found.coverPath);
+    if (found.extractedImages) {
+      const imagePaths = Object.values(found.extractedImages);
+      if (imagePaths.length > 0) {
+        console.log(`Cleaning up ${imagePaths.length} extracted images due to error...`);
+        for (const imgPath of imagePaths) {
+          await this.deleteFile(imgPath);
+        }
+      }
+    }
 
     return await this.bookRepository.delete(_id);
   };
@@ -382,7 +394,7 @@ export class BookService {
 
       return fileName;
     } catch (error) {
-      console.error(`Failed to download cover from ${coverUrl}:`, error);
+      console.error(`❌ Failed to download cover from ${coverUrl}:`, error);
       return undefined;
     }
   };
@@ -397,7 +409,7 @@ export class BookService {
       const fullPath = path.join(this.uploadsDir, fileName);
       fs.unlinkSync(fullPath);
     } catch (error) {
-      console.error(`Failed to delete file at ${rawPath}:`, error);
+      console.error(`❌ Failed to delete file at ${rawPath}:`, error);
     }
   };
 

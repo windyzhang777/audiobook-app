@@ -64,7 +64,7 @@ export class AudiobookService {
       try {
         await fs.unlink(audioPath); // Cleanup the partial/broken file
       } catch (error) {
-        console.error(`Failed to delete audio at ${audioPath}:`, error);
+        console.error(`❌ Failed to delete audio at ${audioPath}:`, error);
       }
 
       throw new Error(`Synthesis failed: ${(error as Error).message}`);

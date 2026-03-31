@@ -211,7 +211,7 @@ export class UploadService {
       const tempDir = path.join(this.uploadsDir, 'temp');
       await fs.rm(tempDir, { recursive: true, force: true });
     } catch (error) {
-      console.error(`Failed to delete temp directory for ${uploadId}:`, error);
+      console.error(`❌ Failed to delete temp directory for ${uploadId}:`, error);
     }
     // Remove from sessions
     await UploadSessionModel.findByIdAndDelete(uploadId);

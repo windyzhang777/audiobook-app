@@ -111,7 +111,7 @@ export class BookController {
       res.status(200).json(updatedBook);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Truncate and Re-hydration failed';
-      console.error(`[Controller] ${message}`, error);
+      console.error(`❌ [Controller] ${message}`, error);
       res.status(500).json({ message });
     }
   };
