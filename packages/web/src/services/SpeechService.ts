@@ -1,5 +1,5 @@
 import type { VoiceOption } from '@/pages/BookReader';
-import { getNowISOString, IMAGE_MARKER, type BookContent, type SpeechOptions } from '@audiobook/shared';
+import { CHAPTER_MARKER, getNowISOString, IMAGE_MARKER, type BookContent, type SpeechOptions } from '@audiobook/shared';
 import { TTSNative } from './TTSNative';
 
 export interface SpeechConfigs extends Omit<BookContent, 'pagination'>, SpeechOptions {
@@ -56,8 +56,8 @@ export class SpeechService {
       return;
     }
 
-    // Image Check
-    if (configs.lines[index].startsWith(IMAGE_MARKER)) {
+    // Skip reading image and chapter title
+    if (configs.lines[index].startsWith(CHAPTER_MARKER) || configs.lines[index].startsWith(IMAGE_MARKER)) {
       // Skip image lines but trigger line end to update progress
       const next = index + 1;
       this.onLineEnd?.(next);

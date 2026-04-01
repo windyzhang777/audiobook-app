@@ -5,6 +5,7 @@ import { BookItemConfirmDelete, BookItemConfirmMarkProgress, BookItemDtoModal } 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrapeProgressCompact, UploadProgressDialog } from '@/components/UploadProgress';
+import { FEATURES } from '@/config/features';
 import { api } from '@/services/api';
 import { type Book } from '@audiobook/shared';
 import { BookOpen, LinkIcon, Loader, Loader2, Upload, X } from 'lucide-react';
@@ -19,6 +20,7 @@ export const BookList = () => {
   const [action, setAction] = useState<Action | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [updatedBooks, setUpdatedBooks] = useState<Record<string, number>>({});
+  const [showUrlInput, setShowUrlInput] = useState(false);
 
   const booksFinished = books.filter((book) => book.lastCompleted);
   const booksToRead = books.filter((book) => !book.lastCompleted);
@@ -32,6 +34,10 @@ export const BookList = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleUrlInput = () => {
+    setShowUrlInput(!showUrlInput);
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,12 +122,26 @@ export const BookList = () => {
     }
   }, []);
 
-  const { scrapeUrl, setScrapeUrl, showUrlInput, toggleUrlInput, isScraping, scrapeProgress, error: scrapeError, handleScrape, handleStopScrape } = useScrape(loadBooks);
+  const { scrapeUrl, setScrapeUrl, isScraping, scrapeProgress, error: scrapeError, handleScrape, handleStopScrape } = useScrape(setShowUrlInput, loadBooks);
 
   useEffect(() => {
     loadBooks();
     checkAllUpdates();
   }, [uploadingFile, checkAllUpdates]);
+
+  // hijack the browser's default escape
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        toggleCloseModal();
+        setShowUrlInput(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
 
   if (loading) {
     return (
@@ -141,7 +161,10 @@ export const BookList = () => {
       <div className="flex flex-col gap-3 mb-6 text-sm">
         <div className="flex gap-2">
           {/* File Upload */}
-          <label className="flex-1 flex justify-center items-center gap-2 px-4 bg-primary text-primary-foreground hover:bg-primary/80 rounded-lg whitespace-nowrap cursor-pointer transition-colors shadow-sm">
+          <label
+            htmlFor="upload"
+            className="flex-1 flex justify-center items-center gap-2 px-4 py-1 bg-primary text-primary-foreground hover:bg-primary/80 rounded-md whitespace-nowrap cursor-pointer transition-colors focus-visible:border-none focus-visible:ring-2 focus-visible:ring-amber-400"
+          >
             <Upload size={16} />
             <span className="font-medium">Upload a new book (txt, epub)</span>
             <input
@@ -155,15 +178,17 @@ export const BookList = () => {
               onClick={() => {
                 if (showUrlInput) toggleUrlInput();
               }}
-              className="hidden"
+              className="sr-only"
             />
           </label>
 
           {/* Toggle URL Input */}
-          <Button type="button" variant="outline" onClick={toggleUrlInput} className={`flex-1 flex justify-center items-center gap-2 px-4 py-3 border-2 rounded-xl transition-all`}>
-            <LinkIcon size={18} />
-            <span className="font-medium">Import from URL</span>
-          </Button>
+          {FEATURES.ENABLE_BOOK_SCRAPE && (
+            <Button type="button" variant="outline" onClick={toggleUrlInput} className={`flex-1 flex justify-center items-center gap-2 px-4 py-3 border-2 rounded-xl transition-all`}>
+              <LinkIcon size={18} />
+              <span className="font-medium">Import from URL</span>
+            </Button>
+          )}
         </div>
 
         {/* URL Input Field (Collapsible) */}

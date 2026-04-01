@@ -7,18 +7,13 @@ export interface ScrapeProgress extends UploadProgress {
   message?: string;
 }
 
-export function useScrape(loadBooks: () => Promise<void>) {
-  const [showUrlInput, setShowUrlInput] = useState(false);
+export function useScrape(setShowUrlInput: React.Dispatch<React.SetStateAction<boolean>>, loadBooks: () => Promise<void>) {
   const [scrapeUrl, setScrapeUrl] = useState('');
   const [isScraping, setIsScraping] = useState(false);
   const [scrapeProgress, setScrapeProgress] = useState<ScrapeProgress | null>(null);
   const [error, setError] = useState('');
 
   const stopScrapeRef = useRef<(() => void) | null>(null);
-
-  const toggleUrlInput = () => {
-    setShowUrlInput(!showUrlInput);
-  };
 
   const handleScrape = async () => {
     if (!scrapeUrl.trim() || !scrapeUrl.startsWith('http')) return;
@@ -84,5 +79,5 @@ export function useScrape(loadBooks: () => Promise<void>) {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
-  return { scrapeUrl, setScrapeUrl, showUrlInput, toggleUrlInput, isScraping, scrapeProgress, error, handleScrape, handleStopScrape };
+  return { scrapeUrl, setScrapeUrl, isScraping, scrapeProgress, error, handleScrape, handleStopScrape };
 }
