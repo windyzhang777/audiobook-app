@@ -1,4 +1,4 @@
-import { Book, BookContent, Chapter, CHAPTER_MARKER, IMAGE_MARKER, localeByLang } from '@audiobook/shared';
+import { Book, BookContent, Chapter, CHAPTER_MARKER, fixEncodingTxt, IMAGE_MARKER, localeByLang } from '@audiobook/shared';
 import { EPub } from 'epub2';
 import { TocElement } from 'epub2/lib/epub/const';
 import { franc } from 'franc';
@@ -77,7 +77,7 @@ export class TextProcessorService {
 
   async processBookData(bookId: string, title: string, filePath: string, fileType: string): Promise<ProcessedBook> {
     if (fileType === 'txt') {
-      const fullText = fs.readFileSync(filePath, 'utf-8');
+      const fullText = fixEncodingTxt(filePath);
       const { lang, lines } = await this.processBookText(fullText);
       return { lang, lines, chapters: [{ title, source: '0', isLoaded: true, startIndex: 0 }] };
     }

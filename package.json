@@ -41,6 +41,7 @@
   "dependencies": {
     "@react-navigation/native": "^7.2.1",
     "@types/mongoose": "^5.11.96",
+    "chardet": "^2.1.1",
     "cheerio": "^1.2.0",
     "expo-status-bar": "^55.0.4",
     "iconv-lite": "^0.7.2",

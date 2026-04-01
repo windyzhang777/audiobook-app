@@ -6,6 +6,7 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "lib": ["ESNext", "DOM"],
+    "types": ["node"],
     "paths": { "@/*": ["./src/*"] },
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
