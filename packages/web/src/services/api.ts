@@ -1,4 +1,4 @@
-import type { ScrapeProgress } from '@/common/useScrape';
+import type { ScrapeProgress } from '@/common/useBookScrape';
 import { ChunkedUploader } from '@/services/ChunkedUploader';
 import { UPLOAD_CHUNK_SIZE, type Book, type BookContentPaginated, type ChunkedUploadConfig } from '@audiobook/shared';
 
@@ -115,11 +115,12 @@ export const api = {
     /**
      * Legacy upload (simple, for small files < 1MB)
      */
-    upload: async (file: File): Promise<Book> => {
+    upload: async (file: File, options?: RequestInit): Promise<Book> => {
       const formData = new FormData();
       formData.append('file', file);
 
       const response = await fetch('/api/books/upload', {
+        ...options,
         method: 'POST',
         body: formData,
       });
@@ -132,7 +133,7 @@ export const api = {
       return response.json();
     },
 
-    updateWithCover: async (updates: Book, file: File | null): Promise<Book> => {
+    updateWithCover: async (_id: string, updates: Partial<Book>, file: File | null): Promise<Book> => {
       const formData = new FormData();
 
       formData.append('title', updates.title || '');
@@ -140,7 +141,7 @@ export const api = {
       formData.append('coverPath', updates.coverPath || '');
       if (file) formData.append('cover', file);
 
-      const response = await fetch(`/api/books/${updates._id}/upload`, {
+      const response = await fetch(`/api/books/${_id}/upload`, {
         method: 'PUT',
         body: formData,
       });
@@ -231,21 +232,27 @@ export const api = {
     /**
      * Upload book with chunked upload (recommended for files > 1MB)
      */
-    uploadChunked: async (file: File, config?: Partial<ChunkedUploadConfig>): Promise<Book> => {
+    uploadChunked: async (file: File, config?: Partial<ChunkedUploadConfig>) => {
       const uploader = new ChunkedUploader(file, config);
-      return uploader.upload();
+      return { book: uploader.upload(), uploader };
     },
 
     /**
      * Smart upload - automatically chooses chunked or simple based on file size
      */
-    smartUpload: async (file: File, config?: Partial<ChunkedUploadConfig>): Promise<Book> => {
+    smartUpload: async (file: File, config?: Partial<ChunkedUploadConfig>) => {
       const threshold = UPLOAD_CHUNK_SIZE;
 
       if (file.size > threshold) {
         return api.upload.uploadChunked(file, config);
       } else {
-        return api.books.upload(file);
+        const controller = new AbortController();
+        return {
+          book: api.books.upload(file, { signal: controller.signal }),
+          uploader: {
+            cancel: () => controller.abort(),
+          },
+        };
       }
     },
   },

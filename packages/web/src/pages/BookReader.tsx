@@ -1,6 +1,9 @@
 import { useSaveToLocal } from '@/common/useSaveToLocal';
 import { useSearchBook } from '@/common/useSearchBook';
 import { useUpdateBook } from '@/common/useUpdateBook';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FEATURES } from '@/config/features';
 import { triggerSuccess } from '@/helper';
 import { api } from '@/services/api';
@@ -21,7 +24,6 @@ import {
 import {
   ArrowBigDown,
   ArrowBigUp,
-  ArrowLeft,
   AudioLines,
   BookIcon,
   Bookmark,
@@ -48,7 +50,7 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'r
 import { useNavigate, useParams } from 'react-router-dom';
 import { Virtuoso, type LocationOptions, type VirtuosoHandle } from 'react-virtuoso';
 
-export type ReadingMode = 'user' | 'focus' | 'edit';
+export type ReadingMode = 'user' | 'search' | 'focus' | 'edit';
 
 const SPEECH_RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 const BOOKMARK_TEXT_LIMIT = 20;
@@ -114,6 +116,9 @@ export const BookReader = () => {
   const isSearchJumping = useRef(false);
   const shouldResumeRef = useRef(false);
   const isFetchingRef = useRef(false);
+  const focusedIndexRef = useRef(currentLine);
+  const isfocusedIndexVisibleRef = useRef(false);
+  const shouldReadfocusedIndexRef = useRef(false);
 
   const speechConfigs = useCallback(
     (rate: number = speechRate): SpeechConfigs => ({ bookId: _id || '', lines, lang, rate, totalLines, selectedVoice }),
@@ -123,7 +128,7 @@ export const BookReader = () => {
   const availableVoices = useMemo(() => {
     const nativeVoices = speechService.getNativeVoices(lang);
     const nativeOptions: VoiceOption[] = nativeVoices.map((voice) => ({ type: 'system', id: voice.name, displayName: voice.name, enabled: true }));
-    const cloudOptions: VoiceOption[] = [{ type: 'cloud', id: 'google-neural2', displayName: 'Google AI (Neural2)', enabled: true }];
+    const cloudOptions: VoiceOption[] = [{ type: 'cloud', id: 'google-neural2', displayName: 'Google AI (Neural2)', enabled: false }];
     return [...(nativeOptions.length > 0 ? nativeOptions : [VOICE_FALLBACK]), ...cloudOptions];
   }, [lang]);
 
@@ -131,6 +136,11 @@ export const BookReader = () => {
     flushUpdate();
     navigate('/', { replace });
   };
+
+  const updateCurrentLine = useCallback((lineIndex: number) => {
+    setCurrentLine((prev) => (prev === lineIndex ? prev : lineIndex));
+    focusedIndexRef.current = lineIndex;
+  }, []);
 
   const forceControl = (isUserControl: boolean = true, mode: ReadingMode = 'focus') => {
     isUserScrollRef.current = isUserControl;
@@ -159,7 +169,7 @@ export const BookReader = () => {
   const updateViewIndex = useCallback(
     (lineIndex: number) => {
       const chapters = book?.chapters;
-      if (!chapters) return;
+      if (!chapters || chapters.length === 0 || lineIndex < 0) return;
 
       const chapterIndex = getChapterIndex(lineIndex, chapters);
       if (chapterIndex !== currentChapter) {
@@ -196,13 +206,23 @@ export const BookReader = () => {
       speechService.pause();
     } else {
       toggleIndicatorMessage(renderRateIndicator(speechRate));
-      scrollToLine(currentLine, 'auto');
+
+      let startFrom = shouldReadfocusedIndexRef.current ? focusedIndexRef.current : currentLine;
+
+      if (!isfocusedIndexVisibleRef.current) {
+        scrollToLine(startFrom, 'auto');
+      }
+
+      updateCurrentLine(startFrom);
       forceControl(false, 'focus');
-      const startFrom = currentLine >= totalLines ? 0 : currentLine;
+      startFrom = startFrom >= totalLines ? 0 : startFrom;
       // if at the end, reset to start from the first line
-      if (startFrom === 0) setCurrentLine(0);
+      if (startFrom === 0) {
+        updateCurrentLine(0);
+      }
 
       speechService.start(startFrom, speechConfigs());
+      shouldReadfocusedIndexRef.current = false;
     }
   };
 
@@ -210,7 +230,7 @@ export const BookReader = () => {
     if (readingMode === 'edit') return;
 
     forceControl(false, 'focus');
-    setCurrentLine(lineIndex);
+    updateCurrentLine(lineIndex);
     speechService.stop();
     clearSearch();
   };
@@ -220,15 +240,23 @@ export const BookReader = () => {
     forceControl(false, mode);
   };
 
-  const jumpToIndex = async (lineIndex: number | undefined) => {
+  const jumpToIndex = async (lineIndex: number | undefined, mode: ReadingMode = 'user', readIndex: boolean = false) => {
     if (!_id || lineIndex === undefined) return;
 
+    if (readIndex) {
+      shouldReadfocusedIndexRef.current = true;
+    } else {
+      shouldReadfocusedIndexRef.current = false;
+    }
+
+    focusedIndexRef.current = lineIndex;
     isSearchJumping.current = true;
+
     if (lineIndex >= lines.length) {
       await loadMoreLines(0, lineIndex + PAGE_SIZE);
     }
     scrollToLine(lineIndex, 'auto');
-    forceControl(true, 'user');
+    forceControl(true, mode);
 
     setTimeout(() => {
       isSearchJumping.current = false;
@@ -257,7 +285,7 @@ export const BookReader = () => {
       if (!book) return;
 
       setBook(book);
-      setCurrentLine(book.currentLine || 0);
+      updateCurrentLine(book.currentLine || 0);
       setTotalLines(book.totalLines);
       setFontSize(book.settings?.fontSize || 18);
       setSpeechRate(book.settings?.rate || 1.0);
@@ -392,7 +420,7 @@ export const BookReader = () => {
       speechService.onLoadMoreLines = null;
       speechService.onBookCompleted = null;
     };
-  }, [lastCompleted, loadMoreLines]);
+  }, [lastCompleted, loadMoreLines, setCurrentLine]);
 
   useEffect(() => {
     if (!isPlaying || !lines[currentLine] || !shouldResumeRef.current) return;
@@ -425,6 +453,20 @@ export const BookReader = () => {
   // hijack the browser's default scroll
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const activeElement = document.activeElement;
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        forceControl(true, 'focus');
+        document.body.focus();
+        if (activeElement instanceof HTMLElement) {
+          activeElement.blur();
+        }
+        return;
+      }
+
+      if (activeElement !== document.body) return;
+
       if (e.key === ' ') {
         e.preventDefault();
         handlePlayPause();
@@ -439,11 +481,6 @@ export const BookReader = () => {
         e.preventDefault();
         moveToLine(Math.max(currentLine - 1, 0));
       }
-
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        forceControl(true, 'focus');
-      }
     };
 
     const moveToLine = (lineIndex: number) => {
@@ -451,7 +488,7 @@ export const BookReader = () => {
 
       scrollToLine(lineIndex, 'auto');
       forceControl(false, 'focus');
-      setCurrentLine(lineIndex);
+      updateCurrentLine(lineIndex);
 
       if (isPlaying) {
         speechService.resume(lineIndex, speechConfigs());
@@ -474,7 +511,7 @@ export const BookReader = () => {
     return (
       <div className="absolute top-0 left-0 h-full w-full bg-white opacity-50 flex flex-col justify-center items-center gap-2">
         {error}
-        <button onClick={() => navigateBack(true)}>Go Back</button>
+        <Button onClick={() => navigateBack(true)}>Go Back</Button>
       </div>
     );
   }
@@ -505,16 +542,12 @@ export const BookReader = () => {
         }}
         rangeChanged={(range) => {
           const isVisible = currentLine >= range.startIndex && currentLine <= range.endIndex;
+          isfocusedIndexVisibleRef.current = focusedIndexRef.current >= range.startIndex && focusedIndexRef.current <= range.endIndex;
           setShowJumpButton(!isVisible);
         }}
-        // Custom List Container (Replacing <ol>)
         components={{
           Header: () => (
             <header className="relative text-center my-6 mx-12">
-              <button className="absolute top-2 left-0 p-0!" onClick={() => navigateBack()} title="Back to Books">
-                <ArrowLeft size={16} />
-                <LibraryBig size={16} />
-              </button>
               <h3 className="font-semibold">{bookTitleWithAuthor(book)}</h3>
             </header>
           ),
@@ -581,20 +614,22 @@ export const BookReader = () => {
           return (
             <li
               key={`line-${index}`}
+              id={`line-${index}`}
               role="button"
-              tabIndex={index === currentLine ? 0 : -1}
+              tabIndex={index === currentLine || index === focusedIndexRef.current ? 0 : -1}
               aria-current={index === currentLine ? 'location' : undefined}
               onContextMenu={(e) => {
                 e.preventDefault();
                 toggleBookmark(index, cleanLine);
               }}
               onDoubleClick={() => handleLineClick(index)}
-              className={`group relative cursor-pointer my-1 px-2 transition-colors duration-200 ease-in-out rounded-lg ${line.startsWith(CHAPTER_MARKER) ? 'font-semibold italic text-center uppercase tracking-widest' : ''} ${index === currentLine ? 'bg-amber-100 font-medium' : 'hover:bg-gray-50'} focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-opacity-50 ${isBookmarked ? 'border border-r-4 border-amber-400 pr-2' : 'border-r-4 border-transparent'}`}
+              className={`group relative cursor-pointer my-1 px-2 transition-colors duration-200 ease-in-out rounded-lg ${line.startsWith(CHAPTER_MARKER) ? 'font-semibold italic text-center uppercase tracking-widest' : ''} ${index === currentLine ? 'bg-amber-100 font-medium' : index === focusedIndexRef.current ? 'bg-gray-50' : 'hover:bg-gray-50'} focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-opacity-50 ${isBookmarked ? 'border border-r-4 border-amber-400 pr-2' : 'border-r-4 border-transparent'}`}
             >
               {searchText ? getHighlightedText(cleanLine, searchText) : cleanLine}
 
               {readingMode === 'edit' ? (
-                <button
+                <Button
+                  variant="ghost"
                   aria-label="Delete this line from the book"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -604,9 +639,11 @@ export const BookReader = () => {
                   className={`absolute -right-9 top-0 text-gray-400 hover:opacity-100 transition-opacity duration-150 ${isBookmarked ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}`}
                 >
                   <X size={16} fill="currentColor" />
-                </button>
+                </Button>
               ) : (
-                <button
+                <Button
+                  variant="ghost"
+                  tabIndex={index === currentLine ? 0 : -1}
                   aria-label={`${isBookmarked ? 'Remove' : 'Add'} bookmark for line ${index + 1}`}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -616,7 +653,7 @@ export const BookReader = () => {
                   className={`absolute -right-9 top-0 text-amber-400 hover:opacity-100 transition-opacity duration-150 ${isBookmarked ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}`}
                 >
                   <Bookmark size={16} fill="currentColor" />
-                </button>
+                </Button>
               )}
             </li>
           );
@@ -633,7 +670,9 @@ export const BookReader = () => {
           maxHeight: 'calc(75% - 1.5rem)',
         }}
       >
-        <button
+        <Button
+          variant="ghost"
+          tabIndex={-1}
           onClick={() => jumpToRead('focus')}
           title="Jump to read"
           className={`absolute right-0 w-full h-1 rounded-full bg-amber-200 cursor-pointer pointer-events-auto transition-all duration-300 p-0! hover:scale-125`}
@@ -660,7 +699,8 @@ export const BookReader = () => {
         {/* Jump to Line */}
         <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent [&>button:enabled]:hover:bg-amber-200 [&>button:enabled]:hover:text-gray-600 [&>button:disabled]:hover:transparent [&>button:disabled]:hover:text-default *:rounded-full!">
           {/* Jump to start */}
-          <button
+          <Button
+            variant="ghost"
             id="jump-to-start"
             title="Jump To Start"
             onClick={() => {
@@ -669,16 +709,17 @@ export const BookReader = () => {
             }}
           >
             <ArrowBigUp size={16} />
-          </button>
+          </Button>
 
           {/* Jump to read button */}
-          <button id="jump-to-read" title="Jump To Read" onClick={() => jumpToRead('focus')} className={showJumpButton ? 'text-gray-600!' : 'text-inherit'}>
+          <Button variant="ghost" id="jump-to-read" title="Jump To Read" onClick={() => jumpToRead('focus')} className={showJumpButton ? 'text-gray-600!' : 'text-inherit'}>
             <MapPin size={16} />
-          </button>
+          </Button>
 
           {/* Jump to end */}
-          {FEATURES.ENABLE_SCROLL_TO_END ? (
-            <button
+          {FEATURES.ENABLE_SCROLL_TO_END && (
+            <Button
+              variant="ghost"
               id="jump-to-end"
               title="Jump To End"
               onClick={() => {
@@ -687,47 +728,49 @@ export const BookReader = () => {
               }}
             >
               <ArrowBigDown size={16} />
-            </button>
-          ) : null}
+            </Button>
+          )}
         </div>
 
         {/* Bookmarks */}
-        <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent *:hover:bg-amber-200 *:hover:text-gray-600 *:rounded-full!">
+        <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:hover:bg-amber-200! *:hover:text-gray-600 *:rounded-full!">
           {/* Select Bookmark */}
-          <span title="Bookmarks" className="relative h-8 w-8 px-1">
-            <label htmlFor="select-bookmark" className="absolute top-1/2 -translate-y-1/2 left-2 pointer-events-none">
-              <Bookmark size={16} />
-            </label>
-            <select
-              id="select-bookmark"
-              value=""
+          <Select
+            onValueChange={(val) => {
+              if (!val) return;
+              jumpToIndex(parseInt(val), 'user', true);
+            }}
+          >
+            <SelectTrigger
+              title="Bookmarks"
               onClick={() => {
                 if (isPlaying) isUserFocusRef.current = true;
               }}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val !== '') {
-                  jumpToIndex(parseInt(val));
-                  forceControl(true, 'user');
-                  e.target.blur();
-                }
-              }}
-              className="cursor-pointer text-center text-transparent bg-transparent py-1 w-6!"
+              className="h-8 w-8 [&>svg]:hidden border-none"
             >
-              <option value="" disabled>
-                {bookmarks.length > 0 ? 'Bookmarks' : 'No Bookmarks'}
-              </option>
-              {bookmarks.map((bookmark) => (
-                <option key={`bookmark-${bookmark.index}`} value={bookmark.index} className="text-ellipsis">
-                  {bookmark.text}({bookmark.index + 1})
-                </option>
-              ))}
-            </select>
-          </span>
+              <span>
+                <Bookmark size={16} />
+              </span>
+              <SelectValue placeholder="Bookmarks" className="sr-only [&>svg]:hidden" />
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectGroup>
+                <SelectItem value="none" disabled className="text-muted-foreground">
+                  {bookmarks.length > 0 ? 'Bookmarks' : 'No Bookmarks'}
+                </SelectItem>
+                {bookmarks.map((bookmark) => (
+                  <SelectItem key={`bookmark-${bookmark.index}`} value={bookmark.index.toString()} className="[&>span>span>svg]:hidden border-none">
+                    {bookmark.text} ({bookmark.index + 1})
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
 
           {/* Save Bookmarks to Local */}
-          {FEATURES.ENABLE_BOOKMARK_EDIT ? (
-            <button
+          {FEATURES.ENABLE_BOOKMARK_EDIT && (
+            <Button
+              variant="ghost"
               disabled={!book?.title || bookmarks.length === 0}
               onClick={() => {
                 if (!book?.title || bookmarks.length === 0) return;
@@ -738,12 +781,13 @@ export const BookReader = () => {
               title="Save bookmarks to local"
             >
               <Save size={16} />
-            </button>
-          ) : null}
+            </Button>
+          )}
 
           {/* Import Bookmarks */}
-          {FEATURES.ENABLE_BOOKMARK_EDIT ? (
-            <button
+          {FEATURES.ENABLE_BOOKMARK_EDIT && (
+            <Button
+              variant="ghost"
               disabled={!book?.title}
               onClick={async () => {
                 if (!_id || !book?.title) return;
@@ -761,11 +805,12 @@ export const BookReader = () => {
               title="Import bookmarks from last saved"
             >
               <BookmarkPlus size={16} />
-            </button>
-          ) : null}
+            </Button>
+          )}
 
           {/* Clear Bookmarks */}
-          <button
+          <Button
+            variant="ghost"
             disabled={!book?.title || bookmarks.length === 0}
             onClick={() => {
               if (!confirm(`Deleted all ${bookmarks.length} bookmarks for [${book?.title}]?`)) return;
@@ -774,13 +819,14 @@ export const BookReader = () => {
             title={`Deleted all ${bookmarks.length} bookmarks for [${book.title}]`}
           >
             <BookmarkX size={16} />
-          </button>
+          </Button>
         </div>
 
         {/* Jump to Chapter */}
         {book?.chapters.length > 1 && (
-          <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent [&>button:enabled]:hover:bg-amber-200 [&>button:enabled]:hover:text-gray-600 [&>button:disabled]:hover:transparent [&>button:disabled]:hover:text-default *:rounded-full!">
-            <button
+          <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:hover:bg-amber-200! *:hover:text-gray-600 *:rounded-full!">
+            <Button
+              variant="ghost"
               id="prev-chapter"
               disabled={currentChapter === 0}
               onClick={() => {
@@ -791,50 +837,61 @@ export const BookReader = () => {
               title="Prev chapter"
             >
               <ListStart size={16} />
-            </button>
+            </Button>
 
             {/* Select Chapter */}
-            <span title="Chapters" className="relative h-8 w-8 px-1">
-              <label htmlFor="select-chapter" className="absolute top-1/2 -translate-y-1/2 left-2 pointer-events-none">
-                <TableOfContents size={16} />
-              </label>
-              <select
-                id="select-chapter"
-                value={currentChapter}
+            <Select
+              value={currentChapter.toString()}
+              onValueChange={async (val) => {
+                if (!val) return;
+                const targetChapterIndex = parseInt(val);
+                const chapter = book.chapters[targetChapterIndex];
+                let targetLineIndex = chapter.startIndex;
+                if (targetLineIndex === undefined) {
+                  console.log(`🚰 JIT: Hydrating target chapter ${targetChapterIndex} before jump...`);
+
+                  // This call should return the updated book with the new startIndex
+                  const updatedBook = await hydrateChapterByIndex(targetChapterIndex);
+                  if (updatedBook && updatedBook.chapters[targetChapterIndex].startIndex) {
+                    targetLineIndex = updatedBook.chapters[targetChapterIndex].startIndex;
+                  } else {
+                    console.error(`❌ Failed to hydrate chapter ${targetLineIndex}:`, error);
+                    return;
+                  }
+                }
+                jumpToIndex(targetLineIndex);
+              }}
+            >
+              <SelectTrigger
+                title="Chapters"
                 onClick={() => {
                   if (isPlaying) isUserFocusRef.current = true;
                 }}
-                onChange={async (e) => {
-                  const targetChapterIndex = parseInt(e.target.value);
-                  let targetLineIndex = book.chapters[targetChapterIndex].startIndex;
-                  if (targetLineIndex === undefined) {
-                    console.log(`🚰 JIT: Hydrating target chapter ${targetChapterIndex} before jump...`);
-
-                    // This call should return the updated book with the new startIndex
-                    const updatedBook = await hydrateChapterByIndex(targetChapterIndex);
-                    if (updatedBook) targetLineIndex = updatedBook.chapters[targetChapterIndex].startIndex;
-                  }
-                  jumpToIndex(targetLineIndex);
-                }}
-                className="cursor-pointer text-center text-transparent bg-transparent py-1 w-6!"
+                className="h-8 w-8 [&>svg]:hidden border-none"
               >
-                {book.chapters
-                  .filter((chapter) => chapter.isLoaded)
-                  .map((chapter, index) => (
-                    <option key={`chapter-${index}`} value={index} className="text-ellipsis">
-                      {chapter.title}
-                      {chapter.startIndex ? `(${chapter.startIndex})` : ''}
-                    </option>
-                  ))}
-                {!book.chapters.at(-1)?.isLoaded && (
-                  <option value="" disabled>
+                <span>
+                  <TableOfContents size={16} />
+                </span>
+                <SelectValue placeholder="Chapters" className="sr-only" />
+              </SelectTrigger>
+              <SelectContent align="end">
+                <SelectGroup>
+                  {book.chapters
+                    .filter((chapter) => chapter.isLoaded)
+                    .map((chapter, index) => (
+                      <SelectItem key={`chapter-${index}`} value={index.toString()}>
+                        {`${chapter.title}${chapter.startIndex ? `(${chapter.startIndex})` : ''}`}
+                      </SelectItem>
+                    ))}
+                  <SelectItem value="none" disabled className="text-muted-foreground">
                     ... load more chapters
-                  </option>
-                )}
-              </select>
-            </span>
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
 
-            <button
+            <Button
+              variant="ghost"
               id="next-chapter"
               disabled={currentChapter === book.chapters.length - 1}
               onClick={() => {
@@ -845,117 +902,136 @@ export const BookReader = () => {
               title="Next chapter"
             >
               <ListEnd size={16} />
-            </button>
+            </Button>
           </div>
         )}
 
         {/* Text Size */}
         <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent [&>button:enabled]:hover:bg-amber-200 [&>button:enabled]:hover:text-gray-600 [&>button:disabled]:hover:transparent [&>button:disabled]:hover:text-default *:rounded-full!">
-          <button id="text-size-up" onClick={() => setFontSize(fontSize + 1)} title="Text Size Up">
+          <Button variant="ghost" id="text-size-up" onClick={() => setFontSize(fontSize + 1)} title="Text Size Up">
             <Plus size={16} />
-          </button>
+          </Button>
 
           <span title="Text Size" className="h-8 w-8 pl-2 text-xs bg-transparent! text-gray-600 cursor-default">
             {fontSize}
           </span>
 
-          <button id="text-size-down" onClick={() => setFontSize(fontSize - 1)} title="Text Size Down">
+          <Button variant="ghost" id="text-size-down" onClick={() => setFontSize(fontSize - 1)} title="Text Size Down">
             <Minus size={16} />
-          </button>
+          </Button>
         </div>
 
         {/* Play/Pause */}
-        <button id={isPlaying ? 'pause' : 'play'} onClick={handlePlayPause} title={isPlaying ? 'Pause' : 'Play'} className={isPlaying ? 'text-gray-600' : 'text-green-600'}>
+        <Button variant="ghost" id={isPlaying ? 'pause' : 'play'} onClick={handlePlayPause} title={isPlaying ? 'Pause' : 'Play'} className={isPlaying ? 'text-gray-600' : 'text-green-600'}>
           {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-        </button>
+        </Button>
 
         {/* Voice & Rate */}
-        <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent *:hover:bg-amber-200 *:hover:text-gray-600 *:rounded-full!">
+        <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:hover:bg-amber-200! *:hover:text-gray-600 *:rounded-full!">
           {/* Select Voice */}
-          <span title="Select Voice" className="relative h-8 w-8 px-1">
-            <label htmlFor="select-voice" className="absolute top-1/2 -translate-y-1/2 left-2 pointer-events-none">
-              <UsersRound size={16} />
-            </label>
-            <select
-              id="select-voice"
-              value={selectedVoice.id}
+          <Select
+            value={selectedVoice.id}
+            onValueChange={async (val) => {
+              if (!val) return;
+              const found = availableVoices.find((voiceOption) => voiceOption.id === val);
+              if (found) setSelectedVoice(found);
+              speechService.stop();
+            }}
+          >
+            <SelectTrigger
+              title="Select Voice"
               onClick={() => {
                 if (isPlaying) isUserFocusRef.current = true;
               }}
-              onChange={(e) => {
-                const found = availableVoices.find((voiceOption) => voiceOption.id === e.target.value);
-                if (found) setSelectedVoice(found);
-                speechService.stop();
-                e.target.blur();
-              }}
-              className="cursor-pointer text-center text-transparent bg-transparent py-1 w-6!"
+              className="h-8 w-8 [&>svg]:hidden border-none"
             >
-              <option value="" disabled>
-                Speech Voices
-              </option>
-              {availableVoices.map((voice) => (
-                <option
-                  key={`voice-${voice.id}`}
-                  value={voice.id}
-                  style={{
-                    backgroundColor: voice.enabled ? '#fff' : 'gray',
-                  }}
-                >
-                  {voice.displayName}
-                </option>
-              ))}
-            </select>
-          </span>
+              <span>
+                <UsersRound size={16} />
+              </span>
+              <SelectValue placeholder={selectedVoice.id} className="sr-only" />
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectGroup>
+                <SelectItem value="none" disabled className="text-muted-foreground">
+                  Speech Voices
+                </SelectItem>
+                {availableVoices.map((voice) => (
+                  <SelectItem key={`voice-${voice.id}`} value={voice.id} disabled={!voice.enabled}>
+                    {voice.displayName}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
 
           {/* Select Speech Rate */}
-          <span title="Speech Rate" className="relative h-8 w-8 px-1">
-            <label htmlFor="select-rate" className="absolute top-1/2 -translate-y-1/2 left-2 pointer-events-none">
-              <AudioLines size={16} />
-            </label>
-            <select
-              id="select-rate"
-              value={speechRate}
+          <Select
+            value={speechRate.toString()}
+            onValueChange={async (val) => {
+              if (!val) return;
+              const newRate = parseFloat(val);
+              setSpeechRate(newRate);
+
+              toggleIndicatorMessage(renderRateIndicator(newRate));
+              if (isPlaying) {
+                speechService.resume(currentLine, speechConfigs(newRate));
+              }
+            }}
+          >
+            <SelectTrigger
+              title="Speech Rate"
               onClick={() => {
                 if (isPlaying) isUserFocusRef.current = true;
               }}
-              onChange={(e) => {
-                const newRate = parseFloat(e.target.value);
-                setSpeechRate(newRate);
-
-                toggleIndicatorMessage(renderRateIndicator(newRate));
-                if (isPlaying) {
-                  speechService.resume(currentLine, speechConfigs(newRate));
-                }
-                e.target.blur();
-              }}
-              className="cursor-pointer text-center text-transparent bg-transparent py-1 w-6!"
+              className="h-8 w-8 [&>svg]:hidden border-none"
             >
-              <option value="" disabled>
-                Speech Rates
-              </option>
-              {SPEECH_RATE_OPTIONS.map((rate) => (
-                <option key={`rate-${rate}`} value={rate}>
-                  {rate}x
-                </option>
-              ))}
-            </select>
-          </span>
+              <span>
+                <AudioLines size={16} />
+              </span>
+              <SelectValue placeholder={selectedVoice.id} className="sr-only" />
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectGroup>
+                <SelectItem value="none" disabled className="text-muted-foreground">
+                  Speech Rates
+                </SelectItem>
+                {SPEECH_RATE_OPTIONS.map((rate) => (
+                  <SelectItem key={`rate-${rate}`} value={rate.toString()}>
+                    {rate}x
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Search text */}
-        <button
+        <span
           id="search"
+          tabIndex={0}
           onClick={() => {
-            searchInputRef.current?.focus();
-            forceControl(true, 'user');
+            forceControl(true, 'search');
+            setTimeout(() => {
+              searchInputRef.current?.focus();
+            }, 100);
+          }}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              forceControl(true, 'search');
+              setTimeout(() => {
+                searchInputRef.current?.focus();
+              }, 100);
+            }
           }}
           title="Search text"
-          className={searchText.length > 0 ? 'bg-amber-200! shadow-md' : 'bg-inherit gap-0!'}
+          className={`mx-1 h-8 min-w-8 px-2 rounded-full transition-all duration-200 gap-0! ${readingMode === 'search' ? 'bg-amber-200 shadow-md' : 'bg-inherit'} cursor-pointer hover:bg-amber-200 hover:text-gray-600`}
         >
-          <Search size={16} className={readingMode === 'user' ? 'text-gray-600' : 'text-inherit'} />
-          {readingMode === 'user' && (
-            <>
-              <input
+          <Search size={16} className={`shrink-0 ${readingMode === 'search' ? 'text-gray-600' : 'text-inherit'}`} />
+          {readingMode === 'search' && (
+            <div className="flex items-center animate-in fade-in slide-in-from-left-2 duration-200">
+              <Input
                 id="search-text"
                 name="search-text"
                 type="text"
@@ -975,16 +1051,20 @@ export const BookReader = () => {
                   }
                   if (e.key === 'Escape') {
                     clearSearch();
-                    setReadingMode(readingMode);
+                    setReadingMode('focus');
                   }
                 }}
-                className="h-4 outline-none text-gray-600"
+                // className="h-4 outline-none text-gray-600"
+
+                className="h-6 ml-2 px-1 outline-none border-none focus:ring-0 focus-visible:ring-0 text-gray-700 placeholder:text-gray-500/50"
+                placeholder="Search..."
                 style={{
-                  width: searchText.length > 0 ? `${Math.min(searchText.length, 20)}rem` : '0',
+                  width: searchText.length > 0 ? `${Math.min(searchText.length + 2, 20)}ch` : '8ch',
                 }}
               />
               {searchText.length > 0 && (
-                <button
+                <Button
+                  variant="ghost"
                   onClick={(e) => {
                     e.stopPropagation();
                     clearSearch();
@@ -994,20 +1074,21 @@ export const BookReader = () => {
                   title="Clear search"
                 >
                   <X size={14} />
-                </button>
+                </Button>
               )}
               {searchRes.length > 0 && (
-                <div className={`flex items-center border-l pl-1 mx-1 text-xs text-gray-400/60 animate-in fade-in ${readingMode !== 'user' ? 'text-gray-400' : 'text-gray-600'}`}>
+                <div className={`flex items-center border-l pl-1 mx-1 text-xs text-gray-400/60 animate-in fade-in ${readingMode !== 'search' ? 'text-gray-400' : 'text-gray-600'}`}>
                   {currentMatch + 1}/{searchRes.length}
                 </div>
               )}
-            </>
+            </div>
           )}
-        </button>
+        </span>
 
         {/* Edit book */}
-        {FEATURES.ENABLE_LINE_EDIT ? (
-          <button
+        {FEATURES.ENABLE_LINE_EDIT && (
+          <Button
+            variant="ghost"
             id="edit-book"
             onClick={() => {
               if (readingMode !== 'edit') {
@@ -1020,8 +1101,8 @@ export const BookReader = () => {
             className={readingMode === 'edit' ? 'text-gray-600 bg-green-400!' : 'text-inherit bg-inherit'}
           >
             <ListX size={16} />
-          </button>
-        ) : null}
+          </Button>
+        )}
 
         <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent *:hover:bg-amber-200 *:hover:text-gray-600 *:rounded-full!">
           <span title={book?.title} className="h-8 w-8 pl-2 text-xs text-gray-600 bg-transparent! cursor-default">
@@ -1036,9 +1117,9 @@ export const BookReader = () => {
           ) : null}
 
           {/* Nav back to books */}
-          <button id="back-to-books" onClick={() => navigateBack()} title="Back to Books">
+          <Button variant="ghost" id="back-to-books" onClick={() => navigateBack()} title="Back to Books">
             <LibraryBig size={16} />
-          </button>
+          </Button>
         </div>
       </div>
     </div>

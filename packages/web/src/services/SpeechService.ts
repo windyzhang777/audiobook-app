@@ -1,6 +1,6 @@
 import type { VoiceOption } from '@/pages/BookReader';
+import { TTSNative } from '@/services/TTSNative';
 import { CHAPTER_MARKER, getNowISOString, IMAGE_MARKER, type BookContent, type SpeechOptions } from '@audiobook/shared';
-import { TTSNative } from './TTSNative';
 
 export interface SpeechConfigs extends Omit<BookContent, 'pagination'>, SpeechOptions {
   totalLines: number;

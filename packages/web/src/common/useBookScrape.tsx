@@ -1,13 +1,17 @@
 import { api } from '@/services/api';
 import type { UploadProgress } from '@audiobook/shared';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface ScrapeProgress extends UploadProgress {
   title?: string;
   message?: string;
 }
 
-export function useScrape(setShowUrlInput: React.Dispatch<React.SetStateAction<boolean>>, loadBooks: () => Promise<void>) {
+export function useBookScrape(
+  onClose?: () => void,
+  onComplete?: () => void,
+  // setShowUrlInput: React.Dispatch<React.SetStateAction<boolean>>, loadBooks: () => Promise<void>
+) {
   const [scrapeUrl, setScrapeUrl] = useState('');
   const [isScraping, setIsScraping] = useState(false);
   const [scrapeProgress, setScrapeProgress] = useState<ScrapeProgress | null>(null);
@@ -15,11 +19,13 @@ export function useScrape(setShowUrlInput: React.Dispatch<React.SetStateAction<b
 
   const stopScrapeRef = useRef<(() => void) | null>(null);
 
-  const handleScrape = async () => {
+  const startScrape = useCallback(async () => {
     if (!scrapeUrl.trim() || !scrapeUrl.startsWith('http')) return;
 
     setIsScraping(true);
-    setShowUrlInput(false);
+    setError('');
+    onClose?.();
+
     setScrapeProgress({
       percentage: 0,
       uploadedBytes: 0,
@@ -41,11 +47,10 @@ export function useScrape(setShowUrlInput: React.Dispatch<React.SetStateAction<b
         setIsScraping(false);
         setScrapeProgress(null);
         setScrapeUrl('');
-        loadBooks();
+        onComplete?.();
       },
       (errorMsg) => {
-        // Error!
-        // stopScrapeRef.current = null;
+        // Error - keep progress visible
         setError(errorMsg);
         setIsScraping(false);
         // setScrapeProgress(null);
@@ -53,31 +58,42 @@ export function useScrape(setShowUrlInput: React.Dispatch<React.SetStateAction<b
     );
 
     stopScrapeRef.current = closeFn;
-  };
+  }, [scrapeUrl, onClose, onComplete]);
 
-  const handleStopScrape = () => {
-    if (stopScrapeRef.current) {
-      stopScrapeRef.current(); // Closes the EventSource
-      stopScrapeRef.current = null;
-      setIsScraping(false);
-      setScrapeProgress(null);
-      setError('');
-      console.log('Scrape manually stopped by user');
-    }
-  };
+  const stopScrape = useCallback(() => {
+    if (!stopScrapeRef.current) return;
+
+    stopScrapeRef.current(); // Closes the EventSource
+    stopScrapeRef.current = null;
+    setIsScraping(false);
+    setScrapeProgress(null);
+    setError('');
+    console.log('⛔️ Scrape manually stopped by user');
+  }, []);
+
+  const resetScrapeError = useCallback(() => {
+    setError('');
+    setScrapeProgress(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (stopScrapeRef.current) stopScrapeRef.current();
+    };
+  }, []);
 
   // hijack the browser's default escape
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && isScraping) {
         e.preventDefault();
-        handleStopScrape();
+        stopScrape();
       }
     };
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, []);
+  }, [isScraping, stopScrape]);
 
-  return { scrapeUrl, setScrapeUrl, isScraping, scrapeProgress, error, handleScrape, handleStopScrape };
+  return { scrapeUrl, setScrapeUrl, isScraping, scrapeProgress, error, startScrape, stopScrape, resetScrapeError };
 }

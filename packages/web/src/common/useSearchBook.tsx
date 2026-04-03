@@ -1,12 +1,12 @@
+import { useDebounceCallback } from '@/common/useDebounceCallback';
 import type { ReadingMode } from '@/pages/BookReader';
 import { api } from '@/services/api';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useDebounceCallback } from './useDebounceCallback';
 
 export function useSearchBook(
   id: string | undefined,
   currentLine: number,
-  jumpToIndex: (lineIndex: number | undefined) => Promise<void>,
+  jumpToIndex: (lineIndex: number | undefined, mode: ReadingMode, readIndex?: boolean) => Promise<void>,
   forceControl: (isUserControl?: boolean, readingMode?: ReadingMode) => void,
 ) {
   const [searchText, setSearchText] = useState<string>('');
@@ -31,26 +31,26 @@ export function useSearchBook(
       let nearestMatchIndex = indices.findLastIndex((idx) => idx <= currentLine);
       if (nearestMatchIndex === -1) nearestMatchIndex = indices.findIndex((idx) => idx >= currentLine);
       setCurrentMatch(nearestMatchIndex);
-      jumpToIndex(indices[nearestMatchIndex]);
+      jumpToIndex(indices[nearestMatchIndex], 'search');
     } catch (error) {
       console.error('❌ Failed to search book:', error);
     }
   };
 
-  const prevMatch = () => {
+  const prevMatch = async () => {
     if (searchRes.length === 0) return;
 
     const prev = (currentMatch - 1 + searchRes.length) % searchRes.length;
     setCurrentMatch(prev);
-    jumpToIndex(searchRes[prev]);
+    await jumpToIndex(searchRes[prev], 'search');
   };
 
-  const nextMatch = () => {
+  const nextMatch = async () => {
     if (searchRes.length === 0) return;
 
     const next = (currentMatch + 1) % searchRes.length;
     setCurrentMatch(next);
-    jumpToIndex(searchRes[next]);
+    await jumpToIndex(searchRes[next], 'search');
   };
 
   const clearSearch = useCallback(() => {
@@ -72,7 +72,7 @@ export function useSearchBook(
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
-        forceControl(true, 'user');
+        forceControl(true, 'search');
         setTimeout(() => {
           searchInputRef.current?.focus();
           searchInputRef.current?.select();
