@@ -85,7 +85,9 @@ export class TTSNative {
     this.heartbeatInterval = setInterval(() => {
       // Chrome/Safari Fix: SpeechSynthesis often "times out" after 15s.
       // Pausing and resuming instantly keeps the engine active.
+      console.log(`this.synthesis.speaking, this.synthesis.paused :`, this.synthesis.speaking, this.synthesis.paused);
       if (this.synthesis.speaking && !this.synthesis.paused) {
+        console.log(`in`);
         this.synthesis.pause();
         this.synthesis.resume();
       }

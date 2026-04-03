@@ -3,7 +3,7 @@ import type { ReadingMode } from '@/pages/BookReader';
 import { api } from '@/services/api';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export function useSearchBook(
+export function useBookSearch(
   id: string | undefined,
   currentLine: number,
   jumpToIndex: (lineIndex: number | undefined, mode: ReadingMode, readIndex?: boolean) => Promise<void>,

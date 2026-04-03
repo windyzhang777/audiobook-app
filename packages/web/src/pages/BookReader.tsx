@@ -1,11 +1,11 @@
+import { triggerSuccess } from '@/common/triggerSuccess';
+import { useBookSearch } from '@/common/useBookSearch';
+import { useBookUpdate } from '@/common/useBookUpdate';
 import { useSaveToLocal } from '@/common/useSaveToLocal';
-import { useSearchBook } from '@/common/useSearchBook';
-import { useUpdateBook } from '@/common/useUpdateBook';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FEATURES } from '@/config/features';
-import { triggerSuccess } from '@/helper';
 import { api } from '@/services/api';
 import { speechService, type SpeechConfigs } from '@/services/SpeechService';
 import {
@@ -205,6 +205,8 @@ export const BookReader = () => {
     if (isPlaying) {
       speechService.pause();
     } else {
+      isSearchJumping.current = true;
+
       toggleIndicatorMessage(renderRateIndicator(speechRate));
 
       let startFrom = shouldReadfocusedIndexRef.current ? focusedIndexRef.current : currentLine;
@@ -223,6 +225,9 @@ export const BookReader = () => {
 
       speechService.start(startFrom, speechConfigs());
       shouldReadfocusedIndexRef.current = false;
+      setTimeout(() => {
+        isSearchJumping.current = false;
+      }, 2000);
     }
   };
 
@@ -386,8 +391,8 @@ export const BookReader = () => {
     flushUpdate();
   };
 
-  const { flushUpdate } = useUpdateBook(_id, updatedBook, canUpdate, setBook);
-  const { searchInputRef, searchText, setSearchText, searchRes, currentMatch, prevMatch, nextMatch, clearSearch } = useSearchBook(_id, currentLine, jumpToIndex, forceControl);
+  const { flushUpdate } = useBookUpdate(_id, updatedBook, canUpdate, setBook);
+  const { searchInputRef, searchText, setSearchText, searchRes, currentMatch, prevMatch, nextMatch, clearSearch } = useBookSearch(_id, currentLine, jumpToIndex, forceControl);
   const { saveBookmarksToLocal, importBookmarksFromLocal } = useSaveToLocal();
 
   useEffect(() => {
@@ -1105,7 +1110,7 @@ export const BookReader = () => {
         )}
 
         <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent *:hover:bg-amber-200 *:hover:text-gray-600 *:rounded-full!">
-          <span title={book?.title} className="h-8 w-8 pl-2 text-xs text-gray-600 bg-transparent! cursor-default">
+          <span title={bookTitleWithAuthor(book)} className="h-8 w-8 pl-2 text-xs text-gray-600 bg-transparent! cursor-default">
             <BookIcon size={16} />
           </span>
 

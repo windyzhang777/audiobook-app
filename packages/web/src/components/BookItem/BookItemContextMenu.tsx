@@ -1,18 +1,16 @@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import type { Book } from '@audiobook/shared';
+import type { Book, BookAction } from '@audiobook/shared';
 import { CircleCheck, CircleMinus, Ellipsis, SquarePen } from 'lucide-react';
-
-export type Action = 'rename' | 'delete' | 'reset-progress' | 'mark-as-completed';
 
 interface BookItemContextMenuProps {
   book: Book;
-  canAction: Action;
-  toggleShowModal: (book: Book, action: Action) => void;
+  canAction: BookAction['type'];
+  openAction: (type: BookAction['type'], book: Book) => void;
 }
 
-export const BookItemContextMenu = ({ book, toggleShowModal, canAction }: BookItemContextMenuProps) => {
+export const BookItemContextMenu = ({ book, canAction, openAction }: BookItemContextMenuProps) => {
   return (
     <Dialog>
       <DropdownMenu>
@@ -44,7 +42,7 @@ export const BookItemContextMenu = ({ book, toggleShowModal, canAction }: BookIt
           className="w-full px-2"
         >
           <DropdownMenuGroup>
-            <DropdownMenuItem onSelect={() => toggleShowModal(book, canAction)}>
+            <DropdownMenuItem onSelect={() => openAction(canAction, book)}>
               <CircleCheck />
               Mark Progress...
             </DropdownMenuItem>
@@ -52,7 +50,7 @@ export const BookItemContextMenu = ({ book, toggleShowModal, canAction }: BookIt
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DialogTrigger asChild>
-              <DropdownMenuItem onSelect={() => toggleShowModal(book, 'rename')}>
+              <DropdownMenuItem onSelect={() => openAction('edit', book)}>
                 <SquarePen />
                 Rename...
               </DropdownMenuItem>
@@ -60,7 +58,7 @@ export const BookItemContextMenu = ({ book, toggleShowModal, canAction }: BookIt
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuItem onSelect={() => toggleShowModal(book, 'delete')}>
+            <DropdownMenuItem onSelect={() => openAction('delete', book)}>
               <CircleMinus />
               Remove...
             </DropdownMenuItem>

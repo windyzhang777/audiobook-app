@@ -2,6 +2,8 @@ type BookSource = 'local' | 'web';
 
 export type BookFileType = 'txt' | 'epub' | 'pdf' | 'mobi' | 'web';
 
+export type VoiceType = 'system' | 'cloud';
+
 export interface SpeechOptions {
   rate?: number;
   pitch?: number;
@@ -118,3 +120,5 @@ export interface ChunkMetadata {
   size: number;
   retries: number;
 }
+
+export type BookAction = { type: 'select'; book: Book } | { type: 'edit'; book: Book } | { type: 'delete'; book: Book } | { type: 'resetProgress'; book: Book } | { type: 'markCompleted'; book: Book };

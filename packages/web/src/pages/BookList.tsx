@@ -8,18 +8,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrapeProgress, UploadProgress } from '@/components/UploadProgress';
 import { FEATURES } from '@/config/features';
-import { bookTitleWithAuthor, kebabToTitle, type Book } from '@audiobook/shared';
+import { getBookActionLabel, type Book } from '@audiobook/shared';
 import { BookOpen, LinkIcon, Loader, Loader2, Upload } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export const BookList = () => {
+  const { t } = useTranslation();
+
   const [showFinished, setShowFinished] = useState(true);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
 
-  const { books, loading, loadBooks, updateBook, updateBookWithCover, deleteBook } = useBooks();
-  const { pendingAction, closeAction, openAction } = useBookAction();
-  const { uploadingFile, status, progress, error: errorUpload, startUpload, cancleUpload } = useBookUpload(() => loadBooks());
+  const { books, loading, loadBooks, updateBook, deleteBook } = useBooks(); // fetch data & CRUD
+  const { pendingAction, closeAction, openAction } = useBookAction(); // action on book menu & modal
+  const { uploadingFile, status, progress, error: errorUpload, startUpload, cancleUpload } = useBookUpload(() => loadBooks()); // upload local book
   const {
     scrapeUrl,
     setScrapeUrl,
@@ -31,24 +34,32 @@ export const BookList = () => {
   } = useBookScrape(
     () => setShowUrlInput(false),
     () => loadBooks(),
+  ); // scrape web book
+  const { updatedBooks, updateChapters } = useScrapeUpdates(books); // scrape web book chapter updates
+
+  const booksCompleted = useMemo(
+    () =>
+      books
+        .filter((book) => book.lastCompleted)
+        .sort((a, b) => {
+          if (!a.lastReadAt) return 1;
+          if (!b.lastReadAt) return -1;
+          return b.lastReadAt.localeCompare(a.lastReadAt);
+        }),
+    [books],
   );
-  const { updatedBooks, updateChapters } = useScrapeUpdates(books);
 
-  const booksCompleted = books
-    .filter((book) => book.lastCompleted)
-    .sort((a, b) => {
-      if (!a.lastReadAt) return 1;
-      if (!b.lastReadAt) return -1;
-      return b.lastReadAt.localeCompare(a.lastReadAt);
-    });
-
-  const booksToRead = books
-    .filter((book) => !book.lastCompleted)
-    .sort((a, b) => {
-      if (!a.updatedAt) return 1;
-      if (!b.updatedAt) return -1;
-      return b.updatedAt.localeCompare(a.updatedAt);
-    });
+  const booksToRead = useMemo(
+    () =>
+      books
+        .filter((book) => !book.lastCompleted)
+        .sort((a, b) => {
+          if (!a.updatedAt) return 1;
+          if (!b.updatedAt) return -1;
+          return b.updatedAt.localeCompare(a.updatedAt);
+        }),
+    [books],
+  );
 
   // hijack the browser's default escape
   useEffect(() => {
@@ -166,7 +177,7 @@ export const BookList = () => {
             selectBook={() => setSelectedBook(book)}
             hasNewChapters={updatedBooks[book._id] > 0}
             updateChapters={() => updateChapters(book._id)}
-            canAction="mark-as-completed"
+            canAction="markCompleted"
             openAction={openAction}
           />
         ))}
@@ -197,7 +208,7 @@ export const BookList = () => {
                     selectBook={() => setSelectedBook(book)}
                     hasNewChapters={updatedBooks[book._id] > 0}
                     updateChapters={() => updateChapters(book._id)}
-                    canAction="reset-progress"
+                    canAction="resetProgress"
                     openAction={openAction}
                   />
                 ))}
@@ -208,37 +219,30 @@ export const BookList = () => {
       )}
 
       {/* Upload Progress Modal */}
-      <UploadProgress uploadingFile={uploadingFile} status={status} progress={progress} error={errorUpload} cancleUpload={cancleUpload} />
+      {uploadingFile && <UploadProgress file={uploadingFile} status={status} progress={progress} error={errorUpload} cancleUpload={cancleUpload} />}
 
       {/* Scrape Progress Modal */}
       {scrapeProgress ? <ScrapeProgress progress={scrapeProgress} error={errorScrape} stopScrape={stopScrape} /> : null}
 
       {/* Book Item Modal */}
-      {pendingAction && (
-        <EditBookInfo
-          open={pendingAction?.type === 'edit'}
-          onClose={closeAction}
-          title="Book Info"
-          description="Update book DTO on title, author, and book corver"
-          book={pendingAction.book}
-          onConfirm={updateBookWithCover}
-        />
+      {!!pendingAction && (
+        <EditBookInfo open={pendingAction?.type === 'edit'} onClose={closeAction} title={getBookActionLabel(pendingAction.type, t, 'modalTitle')} onConfirm={updateBook} book={pendingAction.book} />
       )}
-      {pendingAction && (
+      {!!pendingAction && (
         <ConfirmModal
           open={pendingAction.type === 'delete'}
           onClose={closeAction}
-          title={`Delete ${bookTitleWithAuthor(pendingAction.book)}?`}
-          confirmText="Delete"
+          title={getBookActionLabel(pendingAction.type, t, 'modalTitle')}
+          confirmText={getBookActionLabel(pendingAction.type, t, 'confirmText')}
           onConfirm={() => deleteBook(pendingAction.book._id)}
         />
       )}
-      {pendingAction && (
+      {!!pendingAction && (
         <ConfirmModal
-          open={pendingAction.type === 'reset-progress' || pendingAction.type === 'mark-as-completed'}
+          open={pendingAction.type === 'resetProgress' || pendingAction.type === 'markCompleted'}
           onClose={closeAction}
-          title={`${kebabToTitle(pendingAction.type)} for ${bookTitleWithAuthor(pendingAction.book)}`}
-          onConfirm={() => updateBook(pendingAction.book._id, { lastCompleted: pendingAction?.type === 'mark-as-completed' ? new Date().toISOString() : '' })}
+          title={getBookActionLabel(pendingAction.type, t, 'modalTitle')}
+          onConfirm={() => updateBook(pendingAction.book._id, { lastCompleted: pendingAction?.type === 'markCompleted' ? new Date().toISOString() : '' })}
         />
       )}
     </div>

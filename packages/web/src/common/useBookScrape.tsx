@@ -20,7 +20,10 @@ export function useBookScrape(
   const stopScrapeRef = useRef<(() => void) | null>(null);
 
   const startScrape = useCallback(async () => {
-    if (!scrapeUrl.trim() || !scrapeUrl.startsWith('http')) return;
+    if (!scrapeUrl.trim() || !scrapeUrl.startsWith('http')) {
+      setError('Invalid URL');
+      return;
+    }
 
     setIsScraping(true);
     setError('');

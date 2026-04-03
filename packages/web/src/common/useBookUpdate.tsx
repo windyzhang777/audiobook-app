@@ -3,7 +3,7 @@ import { api } from '@/services/api';
 import { FIVE_MINUTES, type Book } from '@audiobook/shared';
 import { useEffect } from 'react';
 
-export function useUpdateBook(id: string | undefined, updatedBook: Partial<Book>, canUpdate: boolean, setBook: React.Dispatch<React.SetStateAction<Book | undefined>>) {
+export function useBookUpdate(id: string | undefined, updatedBook: Partial<Book>, canUpdate: boolean, setBook: React.Dispatch<React.SetStateAction<Book | undefined>>) {
   const handleBookUpdate = async () => {
     if (!id) return;
     try {

@@ -2,6 +2,15 @@ import type { ScrapeProgress } from '@/common/useBookScrape';
 import { ChunkedUploader } from '@/services/ChunkedUploader';
 import { UPLOAD_CHUNK_SIZE, type Book, type BookContentPaginated, type ChunkedUploadConfig } from '@audiobook/shared';
 
+const getErrorMessage = async (response: Response, message?: string): Promise<string> => {
+  try {
+    const json = await response.json();
+    return json.message || json.error || message || 'Unknown error';
+  } catch {
+    return message || response.statusText || 'Request failed';
+  }
+};
+
 export const api = {
   books: {
     /**
@@ -11,43 +20,48 @@ export const api = {
       const eventSource = new EventSource(`/api/books/scrape?url=${encodeURIComponent(url)}`);
 
       eventSource.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+        try {
+          const data = JSON.parse(event.data);
 
-        if (data.error) {
-          onError(data.error);
+          if (data.error) {
+            onError(data.error);
+            eventSource.close();
+          } else if (data.complete) {
+            onComplete(data.book);
+            eventSource.close();
+          } else if (data.message) {
+            onProgress({
+              message: data.message, // "Gathering chapters..."
+              title: data.title,
+              percentage: 0,
+              uploadedBytes: 0,
+              totalBytes: 0,
+              currentChunk: 0,
+              totalChunks: 0,
+              speed: 0,
+              estimatedTimeRemaining: 0,
+            });
+          } else {
+            onProgress({
+              message: data.title,
+              title: data.title,
+              percentage: (data.current / data.total) * 100,
+              uploadedBytes: data.current,
+              totalBytes: data.total,
+              currentChunk: data.current,
+              totalChunks: data.total, // Total chapters
+              speed: 0,
+              estimatedTimeRemaining: 0,
+            });
+          }
+        } catch {
+          onError('Failed to parse server response');
           eventSource.close();
-        } else if (data.complete) {
-          onComplete(data.book);
-          eventSource.close();
-        } else if (data.message) {
-          onProgress({
-            message: data.message, // "Gathering chapters..."
-            title: data.title,
-            percentage: 0,
-            uploadedBytes: 0,
-            totalBytes: 0,
-            currentChunk: 0,
-            totalChunks: 0,
-            speed: 0,
-            estimatedTimeRemaining: 0,
-          });
-        } else {
-          onProgress({
-            message: data.title,
-            title: data.title,
-            percentage: (data.current / data.total) * 100,
-            uploadedBytes: data.current,
-            totalBytes: data.total,
-            currentChunk: data.current,
-            totalChunks: data.total, // Total chapters
-            speed: 0,
-            estimatedTimeRemaining: 0,
-          });
         }
       };
 
       eventSource.onerror = () => {
-        onError('Connection to scraping server lost.');
+        onError('Connection to scraping server lost');
         eventSource.close();
       };
 
@@ -60,8 +74,8 @@ export const api = {
       });
 
       if (!response.ok) {
-        const json = await response.json();
-        throw new Error(json.message || `Failed to hydrate for chapter ${chapterIndex} for book ${_id}`);
+        const errorMessage = await getErrorMessage(response, `Failed to hydrate for chapter ${chapterIndex} for book ${_id}`);
+        throw new Error(errorMessage);
       }
 
       return response.json();
@@ -76,8 +90,8 @@ export const api = {
       });
 
       if (!response.ok) {
-        const json = await response.json();
-        throw new Error(json.message || `Failed to re-hydrate from chapter ${chapterIndex}`);
+        const errorMessage = await getErrorMessage(response, `Failed to re-hydrate from chapter ${chapterIndex}`);
+        throw new Error(errorMessage);
       }
 
       return response.json();
@@ -91,8 +105,8 @@ export const api = {
       const response = await fetch('/api/books/check-updates');
 
       if (!response.ok) {
-        const json = await response.json();
-        throw new Error(json.message || 'Update check failed');
+        const errorMessage = await getErrorMessage(response, 'Failed to check chapter updates');
+        throw new Error(errorMessage);
       }
 
       return response.json();
@@ -105,8 +119,8 @@ export const api = {
       const response = await fetch(`/api/books/${_id}/refresh`, { method: 'POST' });
 
       if (!response.ok) {
-        const json = await response.json();
-        throw new Error(json.message || `Update chapters failed for book ${_id}`);
+        const errorMessage = await getErrorMessage(response, `Failed to update chapters for book ${_id}`);
+        throw new Error(errorMessage);
       }
 
       return response.json();
@@ -126,8 +140,8 @@ export const api = {
       });
 
       if (!response.ok) {
-        const json = await response.json();
-        throw new Error(json.message);
+        const errorMessage = await getErrorMessage(response);
+        throw new Error(errorMessage);
       }
 
       return response.json();
@@ -147,10 +161,27 @@ export const api = {
       });
 
       if (!response.ok) {
-        const json = await response.json();
-        throw new Error(json.message);
+        const errorMessage = await getErrorMessage(response);
+        throw new Error(errorMessage);
       }
 
+      return response.json();
+    },
+
+    update: async (_id: string, updates: Partial<Book>): Promise<Book> => {
+      const response = await fetch(`/api/books/${_id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ...updates }),
+        keepalive: true,
+      });
+
+      if (!response.ok) {
+        const errorMessage = await getErrorMessage(response, `Failed to update for book ${_id}`);
+        throw new Error(errorMessage);
+      }
       return response.json();
     },
 
@@ -158,8 +189,8 @@ export const api = {
       const response = await fetch('/api/books');
 
       if (!response.ok) {
-        const json = await response.json();
-        throw new Error(json.message);
+        const errorMessage = await getErrorMessage(response);
+        throw new Error(errorMessage);
       }
       return response.json();
     },
@@ -168,8 +199,8 @@ export const api = {
       const response = await fetch(`/api/books/${_id}`);
 
       if (!response.ok) {
-        const json = await response.json();
-        throw new Error(json.message);
+        const errorMessage = await getErrorMessage(response);
+        throw new Error(errorMessage);
       }
       return response.json();
     },
@@ -178,8 +209,8 @@ export const api = {
       const response = await fetch(`/api/books/${_id}/content?offset=${offset}&limit=${limit}`);
 
       if (!response.ok) {
-        const json = await response.json();
-        throw new Error(json.message);
+        const errorMessage = await getErrorMessage(response);
+        throw new Error(errorMessage);
       }
       return response.json();
     },
@@ -188,31 +219,10 @@ export const api = {
       const response = await fetch(`/api/books/${_id}/search?q=${query}`);
 
       if (!response.ok) {
-        const json = await response.json();
-        throw new Error(json.message);
+        const errorMessage = await getErrorMessage(response);
+        throw new Error(errorMessage);
       }
       return response.json();
-    },
-
-    update: async (_id: string, updates: Partial<Book>): Promise<Book> => {
-      try {
-        const response = await fetch(`/api/books/${_id}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ ...updates }),
-          keepalive: true,
-        });
-
-        if (!response.ok) {
-          const json = await response.json();
-          throw new Error(json.message);
-        }
-        return response.json();
-      } catch {
-        throw new Error('api to update book failed');
-      }
     },
 
     deleteLine: async (_id: string, lineIndex: number) => {
