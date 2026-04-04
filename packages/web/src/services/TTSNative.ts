@@ -1,4 +1,4 @@
-import { type SpeechOptions } from '@audiobook/shared';
+import { getNowISOString, type SpeechOptions } from '@audiobook/shared';
 
 export type TTSStatus = 'idle' | 'speaking' | 'paused';
 
@@ -11,6 +11,7 @@ export class TTSNative {
   private synthesis: SpeechSynthesis = window.speechSynthesis;
   private utterance: SpeechSynthesisUtterance | null = null;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private lastBoundaryTimestamp: number | null = null;
   private status: TTSStatus = 'idle';
 
   constructor() {
@@ -32,26 +33,29 @@ export class TTSNative {
     this.utterance.volume = configs.volume ?? 1.0;
 
     if (configs.voice) {
-      if (typeof configs.voice === 'string') {
-        this.utterance.voice = this.getVoice(configs);
-      } else {
-        this.utterance.voice = configs.voice;
-      }
+      this.utterance.voice = typeof configs.voice === 'string' ? this.getVoice(configs) : configs.voice;
     }
+
+    this.utterance.onboundary = () => {
+      this.lastBoundaryTimestamp = performance.now();
+    };
 
     this.utterance.onstart = () => {
       this.status = 'speaking';
+      this.lastBoundaryTimestamp = performance.now();
       this.startHeartbeat();
     };
 
     this.utterance.onend = () => {
       this.status = 'idle';
+      this.lastBoundaryTimestamp = null;
       this.clearHeartbeat();
       onEnd?.();
     };
 
     this.utterance.onerror = () => {
       this.status = 'idle';
+      this.lastBoundaryTimestamp = null;
       this.clearHeartbeat();
       onError?.();
     };
@@ -85,13 +89,18 @@ export class TTSNative {
     this.heartbeatInterval = setInterval(() => {
       // Chrome/Safari Fix: SpeechSynthesis often "times out" after 15s.
       // Pausing and resuming instantly keeps the engine active.
-      console.log(`this.synthesis.speaking, this.synthesis.paused :`, this.synthesis.speaking, this.synthesis.paused);
-      if (this.synthesis.speaking && !this.synthesis.paused) {
-        console.log(`in`);
-        this.synthesis.pause();
-        this.synthesis.resume();
-      }
-    }, 10000);
+      if (!this.synthesis.speaking || this.synthesis.paused) return;
+
+      const now = performance.now();
+      const idleMs = this.lastBoundaryTimestamp ? now - this.lastBoundaryTimestamp : Infinity;
+
+      if (idleMs < 12000) return;
+
+      console.log('[TTSNative] heartbeat', this.synthesis.speaking, this.synthesis.paused, idleMs, getNowISOString());
+
+      this.synthesis.pause();
+      this.synthesis.resume();
+    }, 5000);
   }
 
   private clearHeartbeat(): void {
