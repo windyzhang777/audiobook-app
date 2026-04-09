@@ -3,13 +3,15 @@ import { useBooks } from '@/common/useBooks';
 import { useBookScrape } from '@/common/useBookScrape';
 import { useBookUpload } from '@/common/useBookUpload';
 import { useScrapeUpdates } from '@/common/useScrapeUpdates';
+import { Button } from '@/components//ui/button';
 import { BookItem, ConfirmModal, EditBookInfo } from '@/components/BookItem';
-import { Button } from '@/components/ui/button';
+import { useTheme } from '@/components/theme-provider';
+import { ButtonGroup } from '@/components/ui/button-group';
 import { Input } from '@/components/ui/input';
 import { ScrapeProgress, UploadProgress } from '@/components/UploadProgress';
 import { FEATURES } from '@/config/features';
 import { getBookActionLabel, type Book } from '@audiobook/shared';
-import { BookOpen, LinkIcon, Loader, Loader2, Upload } from 'lucide-react';
+import { BookOpen, LinkIcon, Loader, Loader2, Moon, Sun, Upload } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -20,9 +22,19 @@ export const BookList = () => {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
 
-  const { books, loading, loadBooks, updateBook, deleteBook } = useBooks(); // fetch data & CRUD
-  const { pendingAction, closeAction, openAction } = useBookAction(); // action on book menu & modal
-  const { uploadingFile, status, progress, error: errorUpload, startUpload, cancleUpload } = useBookUpload(() => loadBooks()); // upload local book
+  // theme hook
+  const { theme, setTheme } = useTheme();
+
+  // data hook
+  const { books, loading, loadBooks, updateBook, deleteBook } = useBooks();
+
+  // action hook - action on book menu & modal
+  const { pendingAction, closeAction, openAction } = useBookAction();
+
+  // upload hook - upload local book
+  const { uploadingFile, status, progress, error: errorUpload, startUpload, cancleUpload } = useBookUpload(() => loadBooks());
+
+  // scrape hook - scrape web book
   const {
     scrapeUrl,
     setScrapeUrl,
@@ -34,8 +46,10 @@ export const BookList = () => {
   } = useBookScrape(
     () => setShowUrlInput(false),
     () => loadBooks(),
-  ); // scrape web book
-  const { updatedBooks, updateChapters } = useScrapeUpdates(books); // scrape web book chapter updates
+  );
+
+  // scrape web book chapter updates
+  const { updatedBooks, updateChapters } = useScrapeUpdates(books);
 
   const booksCompleted = useMemo(
     () =>
@@ -87,8 +101,16 @@ export const BookList = () => {
   return (
     <div className="min-h-full max-w-md md:max-w-2xl lg:max-w-4xl mx-auto pt-8 pb-30 px-6 flex flex-col">
       {/* Header */}
-      <header className="text-center mb-4">
-        <h3 className="font-semibold">My Books</h3>
+      <header className="text-center mb-4 flex justify-between items-center ">
+        <h3 className="font-semibold opacity-0">My Books</h3>
+        <ButtonGroup className="gap-2">
+          <Button size="icon" variant={theme === 'light' ? 'default' : 'outline'} onClick={() => setTheme('light')} className="grow border! border-sidebar-accent!">
+            <Sun strokeWidth={1.5} className="w-5! h-5!" />
+          </Button>
+          <Button size="icon" variant={theme === 'dark' ? 'default' : 'outline'} onClick={() => setTheme('dark')} className="grow border! border-sidebar-accent!">
+            <Moon strokeWidth={1.5} className="w-5! h-5!" />
+          </Button>
+        </ButtonGroup>
       </header>
 
       {/* File Upload & Scrape Controls */}

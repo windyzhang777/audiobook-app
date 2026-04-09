@@ -54,6 +54,7 @@ export const BookItem = ({ book, isSelected, selectBook, hasNewChapters, updateC
 
       {book.source === 'web' && hasNewChapters ? (
         <Button
+          size="icon"
           variant="ghost"
           aria-label="has-new-chapter"
           title="Has new chapters!"
@@ -75,7 +76,7 @@ export const BookItem = ({ book, isSelected, selectBook, hasNewChapters, updateC
           NEW
         </span>
       ) : (
-        <span className="absolute bottom-3.5 left-2 text-[10px] text-black/50">{progress}%</span>
+        <span className="absolute bottom-3.5 left-2 text-[10px] text-muted-foreground">{progress}%</span>
       )}
 
       {/* Ellipsis */}

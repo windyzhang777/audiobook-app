@@ -18,13 +18,13 @@ export const BindingLine = () => (
     className="absolute left-0 top-0 bottom-0 w-4 z-10 pointer-events-none"
     style={{
       background: `linear-gradient(90deg, 
-        rgba(0,0,0,0.2) 0px, rgba(0,0,0,0.2) 2px,             /* Spine Edge (w-0.5) */
-        rgba(255,255,255,0.4) 2px, rgba(255,255,255,0.4) 3px, /* Hinge Groove (left-0.5 w-px) */
-        rgba(255,255,255,0.2) 3px, rgba(255,255,255,0.1) 5px, /* Hinge Glow (left-0.75 w-0.5) */
+        rgba(0,0,0,0.2) 0px, rgba(0,0,0,0.2) 2px,               /* Spine Edge (w-0.5) */
+        rgba(255,255,255,0.4) 2px, rgba(255,255,255,0.4) 3px,   /* Hinge Groove (left-0.5 w-px) */
+        rgba(255,255,255,0.2) 3px, rgba(255,255,255,0.1) 5px,   /* Hinge Glow (left-0.75 w-0.5) */
         transparent 5px,
         rgba(0,0,0,0.05) 6px, rgba(0,0,0,0.02) 8px,             /* Spine Texture (left-1.5 w-0.5) */
         transparent 9px,
-        rgba(255,255,255,0.4) 9px, transparent 11px           /* Surface Glow (left-2.5 w-0.75) */
+        rgba(255,255,255,0.4) 9px, transparent 11px             /* Surface Glow (left-2.5 w-0.75) */
       )`,
     }}
   />

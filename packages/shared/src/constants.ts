@@ -5,6 +5,32 @@ export const CHAPTER_SIZE = 5;
 export const PAGE_SIZE = 50;
 export const ALL_LINES = 999999;
 
+export const MAX_BOOKMARK_TEXT = 20;
+
+// settings
+export const FONT_SIZE_DEFAULT = 18;
+export const MIN_FONT_SIZE = 8;
+export const MAX_FONT_SIZE = 30;
+export const FONT_SIZE_STEP = 1;
+
+export const LINE_HEIGHT_DEFAULT = 2;
+export const MIN_LINE_HEIGHT = 1;
+export const MAX_LINE_HEIGHT = 4;
+export const LINE_HEIGHT_STEP = 0.05;
+
+export const INDENT_DEFAULT = 1;
+export const MIN_INDENT = 0;
+export const MAX_INDENT = 20;
+export const INDENT_STEP = 1;
+
+export const RATE_DEFAULT = 1;
+export const MIN_RATE = 0.25;
+export const MAX_RATE = 5;
+export const RATE_STEP = 0.25;
+
+export const ALIGNMENT_DEFAULT = 'left';
+
+// timeout
 export const ONE_MINUTE = 60 * 1000;
 export const TWO_MINUTES = 2 * 60 * 1000;
 export const FIVE_MINUTES = 5 * 60 * 1000;
@@ -12,7 +38,7 @@ export const TEN_MINUTES = 10 * 60 * 1000;
 export const ONE_HOUR = 60 * 60 * 1000;
 export const ONE_DAY = 24 * 60 * 60 * 1000;
 
-export const CHAPTER_MARKER = '~~~'; // Used to identify chapter titles in the lines array
+export const CHAPTER_MARKER = '[CHAPTER_MARKER]'; // Identify chapter titles in the lines array
 export const IMAGE_MARKER = '[IMAGE_MARKER]';
 
 /**

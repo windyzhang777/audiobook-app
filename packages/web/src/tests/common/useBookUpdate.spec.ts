@@ -1,4 +1,4 @@
-import { useUpdateBook } from '@/common/useUpdateBook';
+import { useBookUpdate } from '@/common/useBookUpdate';
 import { api } from '@/services/api';
 import { FIVE_MINUTES } from '@audiobook/shared';
 import { act, renderHook } from '@testing-library/react';
@@ -13,7 +13,7 @@ vi.mock('@/services/api', () => ({
   },
 }));
 
-describe('useUpdateBook', () => {
+describe('useBookUpdate', () => {
   const mockId = 'book-123';
   const mockUpdatedData = { currentLine: 50 };
   const setBook = vi.fn();
@@ -28,7 +28,7 @@ describe('useUpdateBook', () => {
   });
 
   it('should call debounceUpdate when canUpdate is true', async () => {
-    renderHook(() => useUpdateBook(mockId, mockUpdatedData, true, setBook));
+    renderHook(() => useBookUpdate(mockId, mockUpdatedData, true, setBook));
 
     expect(api.books.update).not.toHaveBeenCalled(); // 5min debounce
 
@@ -38,21 +38,21 @@ describe('useUpdateBook', () => {
   });
 
   it('should not call update if canUpdate is false', () => {
-    renderHook(() => useUpdateBook(mockId, mockUpdatedData, false, setBook));
+    renderHook(() => useBookUpdate(mockId, mockUpdatedData, false, setBook));
 
     vi.advanceTimersByTime(FIVE_MINUTES);
     expect(api.books.update).not.toHaveBeenCalled();
   });
 
   it('should flush updates immediately when flushUpdate is called', async () => {
-    const { result } = renderHook(() => useUpdateBook(mockId, mockUpdatedData, true, setBook));
+    const { result } = renderHook(() => useBookUpdate(mockId, mockUpdatedData, true, setBook));
 
     await act(async () => result.current.flushUpdate());
     expect(api.books.update).toHaveBeenCalledWith(mockId, mockUpdatedData);
   });
 
   it('should flush updates when window is reloaded (beforeunload)', async () => {
-    renderHook(() => useUpdateBook(mockId, mockUpdatedData, true, setBook));
+    renderHook(() => useBookUpdate(mockId, mockUpdatedData, true, setBook));
 
     // Simulate the browser closing/reloading
     await act(async () => window.dispatchEvent(new Event('beforeunload')));
@@ -60,7 +60,7 @@ describe('useUpdateBook', () => {
   });
 
   it('should flush updates when tab becomes hidden (visibilitychange)', async () => {
-    renderHook(() => useUpdateBook(mockId, mockUpdatedData, true, setBook));
+    renderHook(() => useBookUpdate(mockId, mockUpdatedData, true, setBook));
 
     // Simulate switching apps on mobile
     await act(async () => {

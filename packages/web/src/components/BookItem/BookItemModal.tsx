@@ -46,7 +46,6 @@ export const EditBookInfo = ({ open, onClose, title, onConfirm, book }: EditBook
             </Label>
             <Input id="title" defaultValue={updates.title} onChange={(e) => setUpdates((prev) => ({ ...prev, title: e.target.value }))} />
           </div>
-
           <div className="flex items-center gap-2">
             <Label htmlFor="author" className="w-16">
               Author
@@ -111,7 +110,6 @@ export const ConfirmModal = ({ open, onClose, title, description, confirmText = 
         <DialogTitle className="px-8 leading-relaxed text-center font-semibold">{title}</DialogTitle>
         {description && <DialogDescription>{description}</DialogDescription>}
       </DialogHeader>
-
       <DialogFooter>
         <DialogClose asChild>
           <Button variant="outline">{cancelText}</Button>

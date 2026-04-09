@@ -23,21 +23,29 @@ export class TextProcessorService {
   private uploadsDir = uploadsDir;
 
   detectLanguage(text: string): string {
-    const lang = franc(text, { minLength: 100 });
+    const start = text.length > 2000 ? 1000 : 0;
+    const end = Math.min(text.length, start + 2000);
+    const sample = text.slice(start, end);
+
+    const cjkCount = (sample.match(/[\u4e00-\u9fa5]/g) || []).length;
+    const latinCount = (sample.match(/[a-zA-Z]/g) || []).length;
+
+    let detectionText = sample;
+
+    if (cjkCount > 20 && cjkCount > latinCount * 0.1) {
+      detectionText = sample.replace(/[a-zA-Z]/g, '');
+    }
+
+    const lang = franc(detectionText, { minLength: 20 });
     return localeByLang[lang] || localeByLang.default; // default to English
   }
 
   private async splitTextIntoLines(text: string, lang: string = localeByLang.default): Promise<string[]> {
-    const sanitizedText = text
-      .replace(/&#13;/g, '\r')
-      .replace(/&#10;/g, '\n')
-      .replace(/&nbsp;|&#160;/g, ' ');
-
     try {
       const segmenter = new Intl.Segmenter(lang, { granularity: 'sentence' });
       const segments: string[] = [];
 
-      const iterator = segmenter.segment(sanitizedText);
+      const iterator = segmenter.segment(text);
       for (const { segment } of iterator) {
         if (!segment) continue;
 
@@ -85,7 +93,7 @@ export class TextProcessorService {
     }
 
     if (fileType === 'pdf') {
-      return this.processPdf(bookId, title, fileType);
+      return this.processPdf(bookId, title, filePath);
     }
 
     throw new Error(`File type ${fileType} not yet supported for text extraction.`);
@@ -105,7 +113,7 @@ export class TextProcessorService {
       const epub = await EPub.createAsync(filePath);
       if (!epub) throw new Error('EPUB object is null or undefined');
 
-      console.log(`epub :`, epub.flow, epub.manifest, epub.metadata);
+      console.log(`📖 epub :`, epub.flow, epub.manifest, epub.metadata);
 
       const toc = epub.flow;
       if (!toc || toc.length === 0) throw new Error('EPUB has no chapters or content');
@@ -116,12 +124,13 @@ export class TextProcessorService {
       extractedImages = await this.extractAllImages(epub, bookId);
       coverPath = await this.extractCover(epub, bookId);
 
-      for (const chapter of toc) {
+      for (const [index, chapter] of toc.entries()) {
         // Identify non-story chapters by ID or HREF
-        const isMetaFile = /cover|toc|titlepage|adv|insert/i.test(chapter.id) || /cover|toc/i.test(chapter.href) || chapter.id.includes('inline_toc');
+        const isMetaFile = /cover|toc|inline_toc|nav|metadata|titlepage|adv|insert/i.test(chapter.id + chapter.href) || chapter.properties?.includes('nav');
+        const isCopyright = /copyright|legal|license/i.test(chapter.id + chapter.href + (chapter.title || ''));
 
-        if (isMetaFile) {
-          console.log(`⚠️ [Skip] Metadata file: ${chapter.id}`);
+        if (isMetaFile || isCopyright) {
+          console.log(`⚠️ [Skip] TOC files: ${chapter.id} ${chapter.title}`);
           continue;
         }
 
@@ -132,8 +141,11 @@ export class TextProcessorService {
             continue;
           }
 
+          const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+          let bodyContent = bodyMatch ? bodyMatch[1] : html;
+
           // INTERCEPT IMAGES: Replace <img> tags with a text marker
-          html = html.replace(/<img[^>]*>/gi, (match: string) => {
+          bodyContent = bodyContent.replace(/<img[^>]*>/gi, (match: string) => {
             // Find the ID in the tag (e.g., id="x01.jpg")
             const idMatch = match.match(/id=["']([^"']+)["']/) || match.match(/src=["']([^"']+)["']/);
             if (idMatch) {
@@ -145,19 +157,25 @@ export class TextProcessorService {
           });
 
           // Strip HTML and clean whitespace
-          let cleanText = html
+          let cleanText = bodyContent
+            .replace(/&#13;/g, '\n') // Convert CR entity
+            .replace(/&#10;/g, '\n') // Convert LF entity
+            // .replace(/nrvhad\s*/gi, '') // Strip common OCR artifacts
             .replace(/<\/(p|div|h1|h2|h3|h4|h5|h6)>/gi, '\n\n') // Replace all block-level closing tags with double newlines
-            .replace(/<br\s*\/?>/gi, '\n') // Replace standalone line breaks with a single newline
+            .replace(/<br\s*\/?>/gi, ' ') // Replace standalone line breaks with a single space
             .replace(/<[^>]*>/g, ' ') // Strip all remaining tags
-            .replace(/&nbsp;/g, '') // Strip HTML entities
-            .replace(/nrvhad\s*/gi, '') // Strip common OCR artifacts
+            .replace(/&nbsp;/g, ' ') // Strip HTML entities
             .replace(/[ \t]+/g, ' ') // Collapse horizontal tabs/spaces
             .replace(/\n\s*\n/g, '\n\n') // Ensure no more than two newlines
             .trim();
 
+          if (index < toc.length - 10) {
+            console.log(`cleanText :`, cleanText.slice(0, 500));
+          }
+
           if (cleanText) {
             const rawTitle = chapter.title || '';
-            let chapterTitle = rawTitle.replace(/[\.…\s]+$/, '').trim();
+            let chapterTitle = rawTitle.replace(/[\.…\s:*＊·•.\-\(\)、：。．（）]+$/, '').trim();
             const chapterLines: string[] = [];
 
             // Add chapter title marker
@@ -174,10 +192,10 @@ export class TextProcessorService {
 
                 if (foundIndex !== -1) {
                   cleanText = cleanText.substring(foundIndex + chapterTitle.length).trim();
-                  cleanText = cleanText.replace(/^[…\s\.:·\-\(\)、：。（）]+/, '').trim();
+                  cleanText = cleanText.replace(/^[\.…\s:*＊·•.\-\(\)、：。．（）]+/, '').trim();
                 } else {
                   found = false;
-                  console.log(`[Mismatch] Title: "${chapterTitle}" not found in start of text.`);
+                  // console.log(`[Mismatch] Title: "${chapterTitle}" not found in start of text.`);
                 }
               }
             } else {

@@ -1,4 +1,4 @@
-import { useSearchBook } from '@/common/useSearchBook';
+import { useBookSearch } from '@/common/useBookSearch';
 import { api } from '@/services/api';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,7 +7,7 @@ vi.mock('@/services/api', () => ({
   api: { books: { search: vi.fn() } },
 }));
 
-describe('useSearchBook', () => {
+describe('useBookSearch', () => {
   const mockId = 'book-1';
   const jumpToIndex = vi.fn().mockResolvedValue(undefined);
   const forceControl = vi.fn();
@@ -25,7 +25,7 @@ describe('useSearchBook', () => {
     const mockIndices = [10, 20, 30];
     vi.mocked(api.books.search).mockResolvedValue({ indices: mockIndices, count: mockIndices.length });
 
-    const { result } = renderHook(() => useSearchBook(mockId, 0, jumpToIndex, forceControl));
+    const { result } = renderHook(() => useBookSearch(mockId, 0, jumpToIndex, forceControl));
 
     act(() => result.current.setSearchText('chapter'));
     expect(api.books.search).not.toHaveBeenCalled(); // 800ms debounce
@@ -39,7 +39,7 @@ describe('useSearchBook', () => {
     const mockIndices = [5, 15, 25]; // currentLine is 20
     vi.mocked(api.books.search).mockResolvedValue({ indices: mockIndices, count: mockIndices.length });
 
-    const { result } = renderHook(() => useSearchBook(mockId, 20, jumpToIndex, forceControl));
+    const { result } = renderHook(() => useBookSearch(mockId, 20, jumpToIndex, forceControl));
 
     await act(async () => result.current.setSearchText('test'));
     await act(async () => vi.advanceTimersByTime(800));
@@ -53,7 +53,7 @@ describe('useSearchBook', () => {
     const mockIndices = [10, 20];
     vi.mocked(api.books.search).mockResolvedValue({ indices: mockIndices, count: mockIndices.length });
 
-    const { result } = renderHook(() => useSearchBook(mockId, 0, jumpToIndex, forceControl));
+    const { result } = renderHook(() => useBookSearch(mockId, 0, jumpToIndex, forceControl));
 
     await act(async () => result.current.setSearchText('query'));
     await act(async () => vi.advanceTimersByTime(800));
@@ -72,7 +72,7 @@ describe('useSearchBook', () => {
   });
 
   it('hijacks Cmd+F/Ctrl+F to focus search input', async () => {
-    renderHook(() => useSearchBook(mockId, 0, jumpToIndex, forceControl));
+    renderHook(() => useBookSearch(mockId, 0, jumpToIndex, forceControl));
 
     const event = new KeyboardEvent('keydown', {
       key: 'f',
@@ -86,7 +86,7 @@ describe('useSearchBook', () => {
   });
 
   it('clears search on Escape key', async () => {
-    const { result } = renderHook(() => useSearchBook(mockId, 0, jumpToIndex, forceControl));
+    const { result } = renderHook(() => useBookSearch(mockId, 0, jumpToIndex, forceControl));
 
     await act(() => result.current.setSearchText('searching...'));
     await act(async () => vi.advanceTimersByTime(800));

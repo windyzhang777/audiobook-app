@@ -212,6 +212,18 @@ export class BookController {
     }
   };
 
+  getSetting = async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    try {
+      const content = await this.bookService.getSetting(id as string);
+      res.json(content);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error retrieving book setting';
+      return res.status(404).json({ message });
+    }
+  };
+
   search = async (req: Request, res: Response) => {
     const { id } = req.params;
     const query = req.query.q as string;
@@ -223,7 +235,7 @@ export class BookController {
     try {
       const matches = await this.bookService.search(id as string, query);
 
-      res.json({ count: matches.length, indices: matches });
+      res.json({ count: matches.length, matches });
     } catch (error) {
       const message = error instanceof Error ? error.message : `Error text search for "${query}"`;
       return res.status(500).json({ message });
@@ -241,6 +253,17 @@ export class BookController {
       res.json(updatedBook);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error updating book';
+      return res.status(400).json({ message });
+    }
+  };
+
+  updateSetting = async (req: Request, res: Response) => {
+    try {
+      const updatedSetting = await this.bookService.updateSetting(req.params.id as string, { ...req.body });
+
+      res.json(updatedSetting);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error updating setting';
       return res.status(400).json({ message });
     }
   };
