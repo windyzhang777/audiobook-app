@@ -1,6 +1,6 @@
 import type { ScrapeProgress } from '@/common/useBookScrape';
 import { ChunkedUploader } from '@/services/ChunkedUploader';
-import { UPLOAD_CHUNK_SIZE, type Book, type BookContentPaginated, type ChunkedUploadConfig } from '@audiobook/shared';
+import { UPLOAD_CHUNK_SIZE, type Book, type BookContentPaginated, type BookSetting, type ChunkedUploadConfig } from '@audiobook/shared';
 
 const getErrorMessage = async (response: Response, message?: string): Promise<string> => {
   try {
@@ -210,6 +210,33 @@ export const api = {
 
       if (!response.ok) {
         const errorMessage = await getErrorMessage(response);
+        throw new Error(errorMessage);
+      }
+      return response.json();
+    },
+
+    getSetting: async (_id: string): Promise<BookSetting> => {
+      const response = await fetch(`/api/books/${_id}/setting`);
+
+      if (!response.ok) {
+        const errorMessage = await getErrorMessage(response);
+        throw new Error(errorMessage);
+      }
+      return response.json();
+    },
+
+    updateSetting: async (_id: string, updates: Partial<BookSetting>): Promise<BookSetting> => {
+      const response = await fetch(`/api/books/${_id}/setting`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ...updates }),
+        keepalive: true,
+      });
+
+      if (!response.ok) {
+        const errorMessage = await getErrorMessage(response, `Failed to update setting for book ${_id}`);
         throw new Error(errorMessage);
       }
       return response.json();

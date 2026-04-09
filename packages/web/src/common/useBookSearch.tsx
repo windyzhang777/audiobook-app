@@ -1,14 +1,8 @@
 import { useDebounceCallback } from '@/common/useDebounceCallback';
-import type { ReadingMode } from '@/pages/BookReader';
 import { api } from '@/services/api';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export function useBookSearch(
-  id: string | undefined,
-  currentLine: number,
-  jumpToIndex: (lineIndex: number | undefined, mode: ReadingMode, readIndex?: boolean) => Promise<void>,
-  forceControl: (isUserControl?: boolean, readingMode?: ReadingMode) => void,
-) {
+export function useBookSearch(id: string | undefined, viewLine: number, jumpToIndex: (lineIndex: number | undefined, readIndex?: boolean) => Promise<void>, onOpenSearch: () => void) {
   const [searchText, setSearchText] = useState<string>('');
   const [searchRes, setSearchRes] = useState<number[]>([]);
   const [currentMatch, setCurrentMatch] = useState(0);
@@ -28,10 +22,10 @@ export function useBookSearch(
       if (!indices || indices.length === 0) return;
 
       // Find match as "nearest prev with forward fallback"
-      let nearestMatchIndex = indices.findLastIndex((idx) => idx <= currentLine);
-      if (nearestMatchIndex === -1) nearestMatchIndex = indices.findIndex((idx) => idx >= currentLine);
+      let nearestMatchIndex = indices.findLastIndex((idx) => idx <= viewLine);
+      if (nearestMatchIndex === -1) nearestMatchIndex = indices.findIndex((idx) => idx >= viewLine);
       setCurrentMatch(nearestMatchIndex);
-      jumpToIndex(indices[nearestMatchIndex], 'search');
+      await jumpToIndex(indices[nearestMatchIndex]);
     } catch (error) {
       console.error('❌ Failed to search book:', error);
     }
@@ -42,7 +36,7 @@ export function useBookSearch(
 
     const prev = (currentMatch - 1 + searchRes.length) % searchRes.length;
     setCurrentMatch(prev);
-    await jumpToIndex(searchRes[prev], 'search');
+    await jumpToIndex(searchRes[prev]);
   };
 
   const nextMatch = async () => {
@@ -50,15 +44,25 @@ export function useBookSearch(
 
     const next = (currentMatch + 1) % searchRes.length;
     setCurrentMatch(next);
-    await jumpToIndex(searchRes[next], 'search');
+    await jumpToIndex(searchRes[next]);
   };
+
+  const openSearch = useCallback(() => {
+    onOpenSearch();
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }, 100);
+  }, [onOpenSearch]);
 
   const clearSearch = useCallback(() => {
     if (!searchText && searchRes.length === 0) return;
 
     setSearchText('');
-    searchInputRef.current?.blur();
     setSearchRes([]);
+    setTimeout(() => {
+      searchInputRef.current?.blur();
+    }, 100);
   }, [searchText, searchRes.length]);
 
   const { run: debounceSearch } = useDebounceCallback(handleBookSearch, 800);
@@ -72,11 +76,7 @@ export function useBookSearch(
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
-        forceControl(true, 'search');
-        setTimeout(() => {
-          searchInputRef.current?.focus();
-          searchInputRef.current?.select();
-        }, 100);
+        openSearch();
       }
 
       if (e.key === 'Escape') {
@@ -87,7 +87,7 @@ export function useBookSearch(
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [clearSearch, forceControl]);
+  }, [clearSearch, openSearch]);
 
-  return { searchInputRef, searchText, setSearchText, searchRes, currentMatch, prevMatch, nextMatch, clearSearch };
+  return { searchInputRef, searchText, setSearchText, searchRes, currentMatch, prevMatch, nextMatch, openSearch, clearSearch };
 }

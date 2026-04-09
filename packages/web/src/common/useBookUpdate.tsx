@@ -1,26 +1,17 @@
 import { useDebounceCallback } from '@/common/useDebounceCallback';
-import { api } from '@/services/api';
-import { FIVE_MINUTES, type Book } from '@audiobook/shared';
+import { FIVE_MINUTES } from '@audiobook/shared';
 import { useEffect } from 'react';
 
-export function useBookUpdate(id: string | undefined, updatedBook: Partial<Book>, canUpdate: boolean, setBook: React.Dispatch<React.SetStateAction<Book | undefined>>) {
-  const handleBookUpdate = async () => {
-    if (!id) return;
-    try {
-      await api.books.update(id, updatedBook);
-      setBook((prev) => (prev ? { ...prev, ...updatedBook } : prev));
-    } catch (error) {
-      console.error('❌ Failed to update book: ', updatedBook, error);
-    }
-  };
-
-  const { run: debounceUpdate, flush: flushUpdate } = useDebounceCallback(handleBookUpdate, FIVE_MINUTES);
+export function useBookUpdate<T>(_id: string | undefined, updates: T, canUpdate: boolean, onUpdate: (id: string, data: T) => Promise<void>) {
+  const { run: debounceUpdate, flush: flushUpdate } = useDebounceCallback(() => {
+    if (_id) onUpdate(_id, updates);
+  }, FIVE_MINUTES);
 
   useEffect(() => {
-    if (canUpdate) {
+    if (_id && canUpdate) {
       debounceUpdate();
     }
-  }, [debounceUpdate, canUpdate, updatedBook]);
+  }, [_id, canUpdate, debounceUpdate]);
 
   useEffect(() => {
     const handlePageExit = () => {

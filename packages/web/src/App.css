@@ -2,9 +2,9 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/noto-sans';
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
-@import "@fontsource-variable/noto-sans";
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+@import '@fontsource-variable/noto-sans';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -82,6 +82,7 @@
 }
 
 @theme inline {
+  --color-highlight: var(--highlight);
   --font-heading: var(--font-sans);
   --font-sans: 'Noto Sans Variable', sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
@@ -125,6 +126,7 @@
 }
 
 :root {
+  --highlight: oklch(96.2% 0.059 95.617);
   --background: oklch(1 0 0);
   --foreground: oklch(0.148 0.004 228.8);
   --card: oklch(1 0 0);
@@ -160,6 +162,7 @@
 }
 
 .dark {
+  --highlight: oklch(40% 0.1 70);
   --background: oklch(0.148 0.004 228.8);
   --foreground: oklch(0.987 0.002 197.1);
   --card: oklch(0.218 0.008 223.9);

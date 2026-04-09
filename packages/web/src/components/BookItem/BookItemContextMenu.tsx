@@ -16,8 +16,8 @@ export const BookItemContextMenu = ({ book, canAction, openAction }: BookItemCon
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
-            variant="ghost"
             size="icon"
+            variant="ghost"
             aria-label="Open Menu"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => {
@@ -25,7 +25,7 @@ export const BookItemContextMenu = ({ book, canAction, openAction }: BookItemCon
                 e.stopPropagation();
               }
             }}
-            className="absolute bottom-3 right-1 w-5 h-5 hover:text-black"
+            className="absolute bottom-1 right-0 w-5 h-5"
           >
             <Ellipsis />
           </Button>

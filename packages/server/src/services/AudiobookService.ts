@@ -58,7 +58,7 @@ export class AudiobookService {
       }
 
       await new Promise((resolve) => writeStream.end(resolve));
-      await this.bookRepository.updateBook(bookId, { audioPath });
+      await this.bookRepository.setSetting(bookId, { audioPath });
     } catch (error) {
       writeStream.destroy();
       try {

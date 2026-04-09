@@ -1,6 +1,5 @@
 import { getNowISOString, type SpeechOptions } from '@audiobook/shared';
-
-export type TTSStatus = 'idle' | 'speaking' | 'paused';
+import type { SpeechStatus } from './SpeechService';
 
 export interface TTSConfigs extends Omit<SpeechOptions, 'voice'> {
   voice?: SpeechSynthesisVoice | string;
@@ -12,7 +11,7 @@ export class TTSNative {
   private utterance: SpeechSynthesisUtterance | null = null;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private lastBoundaryTimestamp: number | null = null;
-  private status: TTSStatus = 'idle';
+  private status: SpeechStatus = 'idle';
 
   constructor() {
     this.synthesis.onvoiceschanged = () => {
@@ -53,7 +52,8 @@ export class TTSNative {
       onEnd?.();
     };
 
-    this.utterance.onerror = () => {
+    this.utterance.onerror = (event) => {
+      console.error('❌ TTS error:', event);
       this.status = 'idle';
       this.lastBoundaryTimestamp = null;
       this.clearHeartbeat();
@@ -110,7 +110,7 @@ export class TTSNative {
     }
   }
 
-  getStatus(): TTSStatus {
+  getStatus(): SpeechStatus {
     return this.status;
   }
 

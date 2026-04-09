@@ -65,12 +65,14 @@ export const bookRoutes = (bookController: BookController) => {
   router.get('/:id/audio/:lineIndex', bookController.getAudioForLine);
   router.get('/:id/content', bookController.getContent);
   router.get('/:id/search', bookController.search);
+  router.get('/:id/setting', bookController.getSetting);
   router.post('/upload', uploadBook.single('file'), bookController.upload);
   router.post('/:id/refresh', bookController.updateChapters);
   router.post('/:id/hydrate/:index', bookController.hydrateChapter);
   router.post('/:id/rehydrate/:index', bookController.reHydrateFromChapter);
   router.put('/:id/upload', uploadImage.single('cover'), bookController.updateWithCover);
   router.patch('/:id', bookController.updateBook);
+  router.patch('/:id/setting', bookController.updateSetting);
   router.delete('/:id', bookController.delete);
   router.delete('/:id/content', bookController.deleteContent);
 

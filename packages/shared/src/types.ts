@@ -2,23 +2,6 @@ type BookSource = 'local' | 'web';
 
 export type BookFileType = 'txt' | 'epub' | 'pdf' | 'mobi' | 'web';
 
-export type VoiceType = 'system' | 'cloud';
-
-export interface SpeechOptions {
-  rate?: number;
-  pitch?: number;
-  volume?: number;
-  voice?: string;
-}
-
-export interface TextOptions {
-  fontSize?: number;
-}
-
-export interface UserSettings {
-  theme: 'light' | 'dark' | 'system';
-}
-
 export interface BookMark {
   index: number;
   text: string;
@@ -32,6 +15,9 @@ export interface Chapter {
   href?: string;
 }
 
+/**
+ * Book
+ */
 export interface Book {
   _id: string;
   userId: string;
@@ -53,12 +39,11 @@ export interface Book {
   lastCompleted?: string; // ISO string
   chapters: Chapter[];
   bookmarks?: BookMark[];
-
-  // setting for TTS per book
-  settings?: SpeechOptions & TextOptions;
-  audioPath?: string;
 }
 
+/**
+ * BookContent
+ */
 export interface BookContent {
   bookId: string;
   lines: string[];
@@ -75,6 +60,32 @@ export interface Pagination {
   limit?: number;
   total: number;
   hasMore: boolean;
+}
+
+/**
+ * Setting
+ */
+export type VoiceType = 'system' | 'cloud';
+export type Alignment = 'left' | 'center' | 'right';
+export type Theme = 'light' | 'dark';
+
+export interface SpeechOptions {
+  rate?: number;
+  pitch?: number;
+  volume?: number;
+  voice?: string;
+}
+
+export interface TextOptions {
+  fontSize?: number;
+  lineHeight?: number;
+  indent?: number;
+  alignment?: Alignment;
+}
+
+export interface BookSetting extends SpeechOptions, TextOptions {
+  bookId: string;
+  audioPath?: string;
 }
 
 export interface BookDto {

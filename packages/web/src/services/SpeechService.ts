@@ -1,6 +1,8 @@
-import type { VoiceOption } from '@/pages/BookReader';
+import { VOICE_FALLBACK, type VoiceOption } from '@/common/useBookSettings';
 import { TTSNative } from '@/services/TTSNative';
-import { CHAPTER_MARKER, getNowISOString, IMAGE_MARKER, type BookContent, type SpeechOptions } from '@audiobook/shared';
+import { CHAPTER_MARKER, IMAGE_MARKER, type BookContent, type SpeechOptions } from '@audiobook/shared';
+
+export type SpeechStatus = 'idle' | 'speaking' | 'paused' | 'loading';
 
 export interface SpeechConfigs extends Omit<BookContent, 'pagination'>, SpeechOptions {
   totalLines: number;
@@ -16,15 +18,19 @@ export class SpeechService {
   private timer: NodeJS.Timeout | null = null;
   private currentBookId: string | null = null;
 
-  onLineEnd: ((lineIndex: number) => void) | null = null;
+  onLineEnd: ((index: number) => void) | null = null;
   onIsPlayingChange: ((isPlaying: boolean) => void) | null = null;
-  onLoadMoreLines: ((lineIndex: number) => void) | null = null;
-  onBookCompleted: ((dateString: string) => void) | null = null;
+  onLoadMoreLines: ((index: number) => void) | null = null;
+  onBookCompleted: (() => void) | null = null;
 
   private constructor() {
     this.silentAudio.loop = true;
     this.silentAudio.volume = 0.001;
     this.cloudAudio.onerror = () => this.onIsPlayingChange?.(false);
+
+    window.addEventListener('beforeunload', () => {
+      this.stop();
+    });
   }
 
   static getInstance() {
@@ -32,10 +38,15 @@ export class SpeechService {
     return SpeechService.instance;
   }
 
+  getStatus(): SpeechStatus {
+    if (this.ttsNative.getStatus() === 'speaking' && !this.cloudAudio.paused) return 'speaking';
+    if (this.ttsNative.getStatus() === 'paused' && this.cloudAudio.paused) return 'paused';
+    return 'idle';
+  }
+
   start(index: number, configs: SpeechConfigs) {
     // Notify UI to show Pause icon
     this.onIsPlayingChange?.(true);
-
     this.play(index, configs);
   }
 
@@ -45,7 +56,7 @@ export class SpeechService {
     // Boundary Check
     if (index < 0 || index >= configs.totalLines) {
       this.onIsPlayingChange?.(false);
-      this.onBookCompleted?.(getNowISOString());
+      this.onBookCompleted?.();
       return;
     }
 
@@ -66,7 +77,9 @@ export class SpeechService {
     }
 
     // Hardware keep-alive
-    this.silentAudio.play().catch((e) => console.error('Audio play failed:', e));
+    if (this.silentAudio.paused) {
+      this.silentAudio.play().catch((e) => console.error('Audio play failed:', e));
+    }
 
     // MediaSession setup
     this.setupMediaSession(index, configs);
@@ -97,6 +110,14 @@ export class SpeechService {
       this.start(next, configs);
     };
 
+    this.cloudAudio.onerror = () => {
+      console.error('❌ Cloud playback error on line:', index);
+      console.error('↩️ Falling back to system TTS');
+      // Fallback to Native TTS
+      this.stopCloud();
+      this.startSystemSpeech(index, { ...configs, selectedVoice: VOICE_FALLBACK });
+    };
+
     this.cloudAudio.play().catch((e) => {
       // Check if it was interrupted by a new request (common when skipping lines)
       if (e.name !== 'AbortError') {
@@ -104,6 +125,7 @@ export class SpeechService {
       } else {
         console.log('❌ Cloud playback was interrupted by a new request');
       }
+      this.onIsPlayingChange?.(false);
     });
   }
 
@@ -117,6 +139,7 @@ export class SpeechService {
         this.start(next, configs);
       },
       () => {
+        console.error('❌ TTS error on line:', index);
         if (!this.isRestarting) {
           this.onIsPlayingChange?.(false);
         }
@@ -148,6 +171,20 @@ export class SpeechService {
     }
   }
 
+  resume(index: number, configs: SpeechConfigs) {
+    if (this.timer) clearTimeout(this.timer);
+
+    // pause
+    this.pause();
+
+    this.isRestarting = true;
+    // immediate resume
+    this.play(index, configs);
+    this.timer = setTimeout(() => {
+      this.isRestarting = false;
+    }, 1000);
+  }
+
   private stopCloud() {
     this.cloudAudio.pause();
     this.cloudAudio.onended = null;
@@ -155,20 +192,6 @@ export class SpeechService {
     // Unloads the audio resource without destroying the object
     this.cloudAudio.removeAttribute('src');
     this.cloudAudio.load();
-  }
-
-  resume(index: number, configs: SpeechConfigs) {
-    if (this.timer) clearTimeout(this.timer);
-
-    // pause
-    this.pause();
-
-    // play
-    this.isRestarting = true;
-    this.timer = setTimeout(() => {
-      this.play(index, configs);
-      this.isRestarting = false;
-    }, 1000);
   }
 
   getNativeVoices(lang: string) {

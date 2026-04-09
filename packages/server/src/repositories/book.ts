@@ -1,4 +1,4 @@
-import { Book, BookContent, BookContentPaginated, Chapter, PAGE_SIZE } from '@audiobook/shared';
+import { Book, BookContent, BookContentPaginated, BookSetting, Chapter, PAGE_SIZE } from '@audiobook/shared';
 import mongoose, { Schema } from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -24,8 +24,6 @@ const BookSchema = new Schema<Book>(
     lastCompleted: String,
     chapters: [{ title: String, source: String, isLoaded: Boolean, startIndex: Number, href: String }],
     bookmarks: [{ index: Number, text: String }],
-    settings: { fontSize: Number, rate: Number, voice: String },
-    audioPath: String,
   },
   { _id: false, toJSON: { virtuals: true }, toObject: { virtuals: true } },
 );
@@ -43,8 +41,27 @@ const BookContentSchema = new Schema<IBookContent>(
   { _id: false, toJSON: { virtuals: true }, toObject: { virtuals: true } },
 );
 
+interface IBookSetting extends BookSetting {
+  _id: string;
+}
+const BookSettingSchema = new Schema<IBookSetting>(
+  {
+    _id: { type: String, required: true },
+    bookId: { type: String, required: true, index: true },
+    rate: Number,
+    voice: String,
+    fontSize: Number,
+    lineHeight: Number,
+    indent: Number,
+    alignment: String,
+    audioPath: String,
+  },
+  { _id: false, toJSON: { virtuals: true }, toObject: { virtuals: true } },
+);
+
 const BookModel = mongoose.model<Book>('Book', BookSchema);
 const BookContentModel = mongoose.model<IBookContent>('BookContent', BookContentSchema);
+const BookSettingModel = mongoose.model<IBookSetting>('BookSetting', BookSettingSchema);
 
 export class BookRepository {
   getAll = async (): Promise<Book[]> => {
@@ -65,8 +82,7 @@ export class BookRepository {
   };
 
   updateBook = async (_id: string, updates: Partial<Book>): Promise<Book | null> => {
-    const updated = await BookModel.findByIdAndUpdate(_id, { $set: updates }, { returnDocument: 'after' }).lean();
-    return updated;
+    return await BookModel.findByIdAndUpdate(_id, { $set: updates }, { returnDocument: 'after' }).lean();
   };
 
   delete = async (_id: string): Promise<boolean> => {
@@ -111,6 +127,18 @@ export class BookRepository {
       },
       { upsert: true, returnDocument: 'after' },
     );
+  };
+
+  getSetting = async (_id: string): Promise<BookSetting | null> => {
+    return await BookSettingModel.findById(_id).lean();
+  };
+
+  setSetting = async (_id: string, updates: Partial<BookSetting>) => {
+    await BookSettingModel.findByIdAndUpdate(_id, { $set: updates }, { upsert: true, returnDocument: 'after' });
+  };
+
+  updateSetting = async (_id: string, updates: Partial<BookSetting>): Promise<BookSetting | null> => {
+    return await BookSettingModel.findByIdAndUpdate(_id, { $set: updates }, { returnDocument: 'after' }).lean();
   };
 
   /**

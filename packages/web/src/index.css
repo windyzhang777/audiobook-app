@@ -38,7 +38,7 @@ h1 {
 button {
   border-radius: 4px;
   border: none;
-  padding: 0.5rem;
+  padding: 1rem;
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
@@ -61,10 +61,12 @@ select:focus:not(:focus-visible) {
 }
 
 nav {
+  width: 100%;
   display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 0.5em;
-  cursor: pointer;
+  z-index: 10;
 }
 
 @media (prefers-color-scheme: light) {

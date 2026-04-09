@@ -1,4 +1,18 @@
-import { ALL_LINES, Book, BookContent, BookFileType, Chapter, CHAPTER_MARKER, CHAPTER_SIZE } from '@audiobook/shared';
+import {
+  ALIGNMENT_DEFAULT,
+  ALL_LINES,
+  Book,
+  BookContent,
+  BookFileType,
+  BookSetting,
+  Chapter,
+  CHAPTER_MARKER,
+  CHAPTER_SIZE,
+  FONT_SIZE_DEFAULT,
+  INDENT_DEFAULT,
+  LINE_HEIGHT_DEFAULT,
+  RATE_DEFAULT,
+} from '@audiobook/shared';
 import fs from 'fs';
 import { writeFile } from 'fs/promises';
 import path from 'path';
@@ -255,6 +269,14 @@ export class BookService {
         lines,
         lang,
       }),
+      this.bookRepository.setSetting(book._id, {
+        bookId: book._id,
+        fontSize: FONT_SIZE_DEFAULT,
+        lineHeight: LINE_HEIGHT_DEFAULT,
+        indent: INDENT_DEFAULT,
+        rate: RATE_DEFAULT,
+        alignment: ALIGNMENT_DEFAULT,
+      }),
     ]);
 
     this.deleteFile(localPath);
@@ -310,6 +332,14 @@ export class BookService {
     }
   };
 
+  updateSetting = async (_id: string, updates: Partial<BookSetting>) => {
+    const updated = await this.bookRepository.updateSetting(_id, updates);
+    if (!updated) {
+      throw new Error(`Setting with ID ${_id} not found`);
+    }
+    return updated;
+  };
+
   deleteContent = async (_id: string, lineIndex: number) => {
     let book = await this.bookRepository.getById(_id);
     if (!book) {
@@ -359,6 +389,14 @@ export class BookService {
       throw new Error(`Content for book with ID ${_id} not found`);
     }
     return content;
+  };
+
+  getSetting = async (_id: string) => {
+    const setting = await this.bookRepository.getSetting(_id);
+    if (!setting) {
+      throw new Error(`Setting for book with ID ${_id} not found`);
+    }
+    return setting;
   };
 
   search = async (_id: string, query: string) => {

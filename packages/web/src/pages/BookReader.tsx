@@ -1,459 +1,150 @@
-import { triggerSuccess } from '@/common/triggerSuccess';
+import { useAnimationFrame } from '@/common/useAnimationFrame';
+import useBookNavigation from '@/common/useBookNavigation';
+import { useBookReader } from '@/common/useBookReader';
 import { useBookSearch } from '@/common/useBookSearch';
-import { useBookUpdate } from '@/common/useBookUpdate';
-import { useSaveToLocal } from '@/common/useSaveToLocal';
+import { useReaderSettings } from '@/common/useBookSettings';
+import useBookSpeech from '@/common/useBookSpeech';
+import useTimer from '@/common/useTimer';
+import { BookHeader } from '@/components/BookReader/BookHeader';
+import { BookLine } from '@/components/BookReader/BookLine';
+import { SidePanelLeft, SidePanelRight } from '@/components/BookReader/BookSidePanel';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FEATURES } from '@/config/features';
-import { api } from '@/services/api';
-import { speechService, type SpeechConfigs } from '@/services/SpeechService';
-import {
-  bookTitleWithAuthor,
-  calculateProgress,
-  CHAPTER_MARKER,
-  IMAGE_MARKER,
-  PAGE_SIZE,
-  type Book,
-  type BookContent,
-  type BookMark,
-  type Chapter,
-  type SpeechOptions,
-  type TextOptions,
-} from '@audiobook/shared';
-import {
-  ArrowBigDown,
-  ArrowBigUp,
-  AudioLines,
-  BookIcon,
-  Bookmark,
-  BookmarkPlus,
-  BookmarkX,
-  LibraryBig,
-  ListEnd,
-  ListStart,
-  ListX,
-  Loader,
-  Loader2,
-  MapPin,
-  Minus,
-  Pause,
-  Play,
-  Plus,
-  Save,
-  Search,
-  TableOfContents,
-  UsersRound,
-  X,
-} from 'lucide-react';
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BookContext, CommonContext, SearchContext, SettingContext, SpeechContext } from '@/config/contexts';
+import { focusBody, getChapterIndex } from '@/utils';
+import { bookTitleWithAuthor, calculateProgress, type BookMark } from '@audiobook/shared';
+import { Loader, Loader2 } from 'lucide-react';
+import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Virtuoso, type LocationOptions, type VirtuosoHandle } from 'react-virtuoso';
+import { Virtuoso } from 'react-virtuoso';
 
-export type ReadingMode = 'user' | 'search' | 'focus' | 'edit';
-
-const SPEECH_RATE_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
-const BOOKMARK_TEXT_LIMIT = 20;
-
-type VoiceType = 'system' | 'cloud';
-
-export interface VoiceOption {
-  type: VoiceType;
-  id: string;
-  displayName: string;
-  enabled: boolean;
-}
-const VOICE_FALLBACK: VoiceOption = { type: 'system', id: 'system-default', displayName: 'System (Browser)', enabled: true };
+export type ReadingMode = 'tts' | 'search' | 'edit';
 
 export const BookReader = () => {
   const navigate = useNavigate();
   const { id: _id } = useParams<{ id: string }>();
 
-  const [book, setBook] = useState<Book>();
-  const [lines, setLines] = useState<BookContent['lines']>([]);
-  const [lang, setLang] = useState('eng');
-  const [loading, setLoading] = useState(true);
-  const [hasMore, setHasMore] = useState(true);
-  const [totalLines, setTotalLines] = useState(0);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [showJumpButton, setShowJumpButton] = useState(false);
-  const [readingMode, setReadingMode] = useState<ReadingMode>('focus');
-  const [error, setError] = useState<string>();
-  const [indicatorMessage, setIndicatorMessage] = useState<React.ReactNode>(null);
-  const [currentLine, setCurrentLine] = useState<Book['currentLine']>(0);
-  const [currentChapter, setCurrentChapter] = useState(0);
-  const [fontSize, setFontSize] = useState<NonNullable<TextOptions['fontSize']>>(18);
-  const [speechRate, setSpeechRate] = useState<NonNullable<SpeechOptions['rate']>>(1.0);
-  const [voice, setVoice] = useState<VoiceOption['id']>();
-  const [selectedVoice, setSelectedVoice] = useState<VoiceOption>(VOICE_FALLBACK);
-  const [lastCompleted, setlastCompleted] = useState<string>();
-  const [bookmarks, setBookmarks] = useState<BookMark[]>([]);
-  const updatedBook: Partial<Book> = useMemo(
-    () => ({
-      currentLine,
-      lastCompleted,
-      bookmarks,
-      settings: { ...(book?.settings || {}), fontSize, rate: speechRate, voice: selectedVoice.id },
-    }),
-    [book?.settings, currentLine, lastCompleted, bookmarks, fontSize, speechRate, selectedVoice.id],
+  const [readingMode, setReadingMode] = useState<ReadingMode>('tts');
+  const [openPanelLeft, setOpenPanelLeft] = useState(false);
+  const [openPanelRight, setOpenPanelRight] = useState(true);
+
+  // timer hook
+  const { startTimer } = useTimer();
+  const { startAnimationFrame } = useAnimationFrame();
+
+  // data hooks
+  const {
+    loading: loadingBook,
+    book,
+    lines,
+    lang,
+    hasMore,
+    totalLines,
+    loadingMore,
+    currentLine,
+    setCurrentLine,
+    lastCompleted,
+    bookmarks,
+    setBookmarks,
+    toggleBookmark,
+    onBookCompleted,
+    canFetch,
+    flushBook,
+    hydrateChapterByIndex,
+    loadMoreLines,
+    deleteLine,
+  } = useBookReader(_id);
+
+  const {
+    loading: loadingSetting,
+    fontSize,
+    setFontSize,
+    rate,
+    setRate,
+    setVoice,
+    selectedVoice,
+    lineHeight,
+    setLineHeight,
+    indent,
+    setIndent,
+    alignment,
+    setAlignment,
+    flushSetting,
+    availableVoices,
+  } = useReaderSettings(_id, lang);
+
+  // navigation hook
+  const { viewLine, setViewLine, virtuosoRef, isSearchJumpingRef, isViewLineVisibleRef, shouldReadViewLineRef, isUserScrollRef, userScroll, ttsScroll, scrollToLine, jumpToRead, jumpToIndex } =
+    useBookNavigation(lines, loadMoreLines);
+
+  // speech hook
+  const { isPlaying, play, pause, resume, stop } = useBookSpeech(_id, lines, lang, totalLines, selectedVoice, rate, currentLine, setCurrentLine, (index) => loadMoreLines(index), onBookCompleted);
+
+  // search hook
+  const { searchInputRef, searchText, setSearchText, searchRes, currentMatch, prevMatch, nextMatch, openSearch, clearSearch } = useBookSearch(_id, viewLine, jumpToIndex, () => {
+    userScroll();
+    setReadingMode('search');
+  });
+
+  const viewChapter = useMemo(() => {
+    const chapters = book?.chapters;
+    if (!chapters) return undefined;
+    const chapterIndex = getChapterIndex(viewLine, chapters);
+    const chapter = chapters[chapterIndex];
+    if (!chapter) return undefined;
+    return { chapterIndex, ...chapter };
+  }, [viewLine, book?.chapters]);
+
+  const loading = useMemo(() => !_id || loadingBook || loadingSetting, [_id, loadingBook, loadingSetting]);
+
+  const flushUpdate = () => {
+    flushBook();
+    flushSetting();
+  };
+
+  const startFromLine = useCallback(
+    (index: number) => {
+      setCurrentLine((prev) => (prev !== index ? index : prev));
+      setViewLine((prev) => (prev !== index ? index : prev));
+      ttsScroll();
+    },
+    [setCurrentLine, setViewLine, ttsScroll],
   );
-
-  const canUpdate =
-    !loading &&
-    JSON.stringify(updatedBook) !==
-      JSON.stringify({
-        currentLine: book?.currentLine,
-        lastCompleted: book?.lastCompleted,
-        bookmarks: book?.bookmarks,
-        settings: book?.settings,
-      });
-
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const isUserScrollRef = useRef(true);
-  const isUserFocusRef = useRef(false);
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
-  const isSearchJumping = useRef(false);
-  const shouldResumeRef = useRef(false);
-  const isFetchingRef = useRef(false);
-  const focusedIndexRef = useRef(currentLine);
-  const isfocusedIndexVisibleRef = useRef(false);
-  const shouldReadfocusedIndexRef = useRef(false);
-
-  const speechConfigs = useCallback(
-    (rate: number = speechRate): SpeechConfigs => ({ bookId: _id || '', lines, lang, rate, totalLines, selectedVoice }),
-    [_id, lines, lang, totalLines, selectedVoice, speechRate],
-  );
-
-  const availableVoices = useMemo(() => {
-    const nativeVoices = speechService.getNativeVoices(lang);
-    const nativeOptions: VoiceOption[] = nativeVoices.map((voice) => ({ type: 'system', id: voice.name, displayName: voice.name, enabled: true }));
-    const cloudOptions: VoiceOption[] = [{ type: 'cloud', id: 'google-neural2', displayName: 'Google AI (Neural2)', enabled: false }];
-    return [...(nativeOptions.length > 0 ? nativeOptions : [VOICE_FALLBACK]), ...cloudOptions];
-  }, [lang]);
 
   const navigateBack = (replace: boolean = false) => {
     flushUpdate();
     navigate('/', { replace });
   };
 
-  const updateCurrentLine = useCallback((lineIndex: number) => {
-    setCurrentLine((prev) => (prev === lineIndex ? prev : lineIndex));
-    focusedIndexRef.current = lineIndex;
-  }, []);
-
-  const forceControl = (isUserControl: boolean = true, mode: ReadingMode = 'focus') => {
-    isUserScrollRef.current = isUserControl;
-    isUserFocusRef.current = isUserControl;
-    if (readingMode === mode) return;
-
-    if (isUserControl) {
-      setReadingMode(mode);
-    } else {
-      clearSearch();
-      setReadingMode(mode);
-    }
-  };
-
-  const getChapterIndex = useCallback((lineIndex: number, chapters: Chapter[] | undefined) => {
-    if (!chapters || chapters.length <= 1) return 0;
-
-    for (let i = chapters.length - 1; i >= 0; i--) {
-      const startIndex = chapters[i]?.startIndex;
-      if (startIndex === undefined) continue;
-      if (startIndex <= lineIndex) return i;
-    }
-    return 0;
-  }, []);
-
-  const updateViewIndex = useCallback(
-    (lineIndex: number) => {
-      const chapters = book?.chapters;
-      if (!chapters || chapters.length === 0 || lineIndex < 0) return;
-
-      const chapterIndex = getChapterIndex(lineIndex, chapters);
-      if (chapterIndex !== currentChapter) {
-        setCurrentChapter(chapterIndex);
-        if (!isSearchJumping.current) toggleIndicatorMessage(renderChapterIndicator(chapters[chapterIndex]));
-      }
-    },
-    [book?.chapters, getChapterIndex, currentChapter],
-  );
-
-  const scrollToLine = useCallback(
-    (index: number, behavior: LocationOptions['behavior'] = 'smooth') => {
-      virtuosoRef.current?.scrollToIndex({ index, align: 'center', behavior, offset: 120 });
-      updateViewIndex(index);
-    },
-    [updateViewIndex],
-  );
-
-  const toggleIndicatorMessage = (content: React.ReactNode) => {
-    if (!content) return;
-
-    // Rate Indicator (Debounced)
-    if (timerRef.current) clearTimeout(timerRef.current);
-    setIndicatorMessage(content);
-    timerRef.current = setTimeout(() => {
-      setIndicatorMessage(null);
-    }, 2000);
-  };
-
-  const handlePlayPause = () => {
-    if (!_id) return;
-
+  const handlePlayPause = useCallback(() => {
     if (isPlaying) {
-      speechService.pause();
+      pause();
     } else {
-      isSearchJumping.current = true;
+      let startFrom = shouldReadViewLineRef.current ? viewLine : currentLine;
+      startFrom = startFrom >= totalLines ? 0 : startFrom; // if at the end, reset to start from the first line
+      startFromLine(startFrom);
 
-      toggleIndicatorMessage(renderRateIndicator(speechRate));
-
-      let startFrom = shouldReadfocusedIndexRef.current ? focusedIndexRef.current : currentLine;
-
-      if (!isfocusedIndexVisibleRef.current) {
-        scrollToLine(startFrom, 'auto');
-      }
-
-      updateCurrentLine(startFrom);
-      forceControl(false, 'focus');
-      startFrom = startFrom >= totalLines ? 0 : startFrom;
-      // if at the end, reset to start from the first line
-      if (startFrom === 0) {
-        updateCurrentLine(0);
-      }
-
-      speechService.start(startFrom, speechConfigs());
-      shouldReadfocusedIndexRef.current = false;
-      setTimeout(() => {
-        isSearchJumping.current = false;
-      }, 2000);
+      startAnimationFrame(() => scrollToLine(startFrom, 'auto'));
+      play(startFrom);
+      shouldReadViewLineRef.current = false;
     }
+  }, [currentLine, startFromLine, isPlaying, startAnimationFrame, scrollToLine, totalLines, viewLine, shouldReadViewLineRef, play, pause]);
+
+  const handleLineClick = (index: number) => {
+    // if (readingMode === 'edit') return;
+    startFromLine(index);
+    stop();
   };
 
-  const handleLineClick = (lineIndex: number) => {
-    if (readingMode === 'edit') return;
+  // cleanup on unmount
+  useEffect(() => () => stop(), [_id, stop]);
 
-    forceControl(false, 'focus');
-    updateCurrentLine(lineIndex);
-    speechService.stop();
-    clearSearch();
-  };
-
-  const jumpToRead = (mode: ReadingMode = 'focus') => {
-    scrollToLine(currentLine, 'auto');
-    forceControl(false, mode);
-  };
-
-  const jumpToIndex = async (lineIndex: number | undefined, mode: ReadingMode = 'user', readIndex: boolean = false) => {
-    if (!_id || lineIndex === undefined) return;
-
-    if (readIndex) {
-      shouldReadfocusedIndexRef.current = true;
-    } else {
-      shouldReadfocusedIndexRef.current = false;
-    }
-
-    focusedIndexRef.current = lineIndex;
-    isSearchJumping.current = true;
-
-    if (lineIndex >= lines.length) {
-      await loadMoreLines(0, lineIndex + PAGE_SIZE);
-    }
-    scrollToLine(lineIndex, 'auto');
-    forceControl(true, mode);
-
-    setTimeout(() => {
-      isSearchJumping.current = false;
-    }, 2000);
-  };
-
-  const loadBookContent = useCallback(
-    async (offset: number = 0, limit: number = PAGE_SIZE) => {
-      if (!_id) return;
-
-      const content = await api.books.getContent(_id, offset, limit);
-      if (!content) return;
-
-      setLines((prev) => (offset === 0 ? content.lines : [...prev, ...content.lines]));
-      setLang(content.lang);
-      setHasMore(content.pagination.hasMore);
-    },
-    [_id],
-  );
-
-  const loadBook = useCallback(async () => {
-    if (!_id) return;
-
-    try {
-      const book = await api.books.getById(_id);
-      if (!book) return;
-
-      setBook(book);
-      updateCurrentLine(book.currentLine || 0);
-      setTotalLines(book.totalLines);
-      setFontSize(book.settings?.fontSize || 18);
-      setSpeechRate(book.settings?.rate || 1.0);
-      setVoice(book.settings?.voice || VOICE_FALLBACK.id);
-      setlastCompleted(book.lastCompleted || undefined);
-      setBookmarks(book.bookmarks || []);
-
-      await loadBookContent(0, (book.currentLine || 0) + PAGE_SIZE);
-    } catch (error) {
-      setError('Failed to load book');
-      console.error('❌ Failed to load book: ', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [_id, loadBookContent]);
-
-  const hydrateChapterByIndex = useCallback(
-    async (chapterIndex: number) => {
-      if (!_id || !book || book.source !== 'web') return;
-
-      console.log(`[JIT] Hydrating Chapter ${chapterIndex} / ${book?.chapters.length}: ${book.chapters[chapterIndex].title}`);
-
-      try {
-        const updatedBook = await api.books.hydrateChapter(_id, chapterIndex);
-        if (updatedBook) setBook(updatedBook);
-        if (updatedBook?.totalLines && updatedBook.totalLines > totalLines) setTotalLines(updatedBook.totalLines);
-        if (updatedBook) {
-          const nextUnloadedIndex = updatedBook.chapters.findIndex((chapter) => !chapter.isLoaded);
-          const lastLoadedChapter = updatedBook.chapters[nextUnloadedIndex - 1];
-          if (!isSearchJumping.current) toggleIndicatorMessage(renderChapterIndicator(lastLoadedChapter));
-          return updatedBook;
-        }
-      } catch (error) {
-        console.error(`❌ Failed to hydrate chapter ${chapterIndex}:`, error);
-      }
-    },
-    [_id, book, totalLines],
-  );
-
-  const hydrateNextChapterIfNeeded = useCallback(
-    async (requestedEnd: number) => {
-      if (!book?.chapters || book.chapters.length === 0 || book.source !== 'web') return;
-
-      // Load chapters until the the next chapter after the currentLine
-      const nextUnloadedIndex = book.chapters.findIndex((chapter) => !chapter.isLoaded);
-      if (nextUnloadedIndex - 1 === -1 || nextUnloadedIndex === -1) return; // All chapters loaded
-      const lastLoadedChapter = book.chapters[nextUnloadedIndex - 1];
-      if (!lastLoadedChapter?.title || (lastLoadedChapter.startIndex && lastLoadedChapter.startIndex >= requestedEnd)) return;
-
-      await hydrateChapterByIndex(nextUnloadedIndex);
-    },
-    [book, hydrateChapterByIndex],
-  );
-
-  const loadMoreLines = useCallback(
-    async (offset: number = 0, limit: number = PAGE_SIZE) => {
-      if (!hasMore || !_id || loadingMore || isFetchingRef.current) return;
-
-      const loadedCount = lines.length;
-      const requestedEnd = offset + limit;
-      // no need to fetch if requested range is already covered
-      if (requestedEnd <= loadedCount) return;
-
-      isFetchingRef.current = true;
-      setLoadingMore(true);
-
-      try {
-        if (book?.source === 'web') {
-          await hydrateNextChapterIfNeeded(requestedEnd);
-        }
-
-        await loadBookContent(offset, limit);
-      } finally {
-        setLoadingMore(false);
-        isFetchingRef.current = false;
-      }
-    },
-    [hasMore, _id, loadingMore, loadBookContent, lines.length, book?.source, hydrateNextChapterIfNeeded],
-  );
-
-  const toggleBookmark = (index: number, text: string) => {
-    const truncatedText = text.length > BOOKMARK_TEXT_LIMIT ? text.slice(0, BOOKMARK_TEXT_LIMIT) + '...' : text;
-    setBookmarks((prev) => {
-      const exists = prev.find((b) => b.index === index);
-      if (exists) {
-        return prev.filter((b) => b.index !== index);
-      }
-      return [...prev, { index, text: truncatedText }].sort((a, b) => a.index - b.index);
-    });
-  };
-
-  const deleteLine = async (lineIndex: number) => {
-    if (!_id) return;
-
-    await api.books.deleteLine(_id, lineIndex);
-    setLines((prev) => prev.filter((_, i) => i !== lineIndex));
-    setTotalLines((prev) => prev - 1);
-    flushUpdate();
-  };
-
-  const { flushUpdate } = useBookUpdate(_id, updatedBook, canUpdate, setBook);
-  const { searchInputRef, searchText, setSearchText, searchRes, currentMatch, prevMatch, nextMatch, clearSearch } = useBookSearch(_id, currentLine, jumpToIndex, forceControl);
-  const { saveBookmarksToLocal, importBookmarksFromLocal } = useSaveToLocal();
-
-  useEffect(() => {
-    if (!_id) return;
-
-    loadBook();
-
-    return () => {
-      speechService.stop();
-
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [_id, loadBook]);
-
-  useEffect(() => {
-    speechService.onLineEnd = (lineIndex) => setCurrentLine(lineIndex);
-    speechService.onIsPlayingChange = (playing) => setIsPlaying(playing);
-    speechService.onLoadMoreLines = (linesIndex) => {
-      shouldResumeRef.current = true;
-      loadMoreLines(linesIndex);
-    };
-    speechService.onBookCompleted = (date) => {
-      if (!lastCompleted) triggerSuccess();
-      setlastCompleted(date);
-    };
-
-    return () => {
-      speechService.onLineEnd = null;
-      speechService.onIsPlayingChange = null;
-      speechService.onLoadMoreLines = null;
-      speechService.onBookCompleted = null;
-    };
-  }, [lastCompleted, loadMoreLines, setCurrentLine]);
-
-  useEffect(() => {
-    if (!isPlaying || !lines[currentLine] || !shouldResumeRef.current) return;
-
-    shouldResumeRef.current = false;
-    speechService.resume(currentLine, speechConfigs());
-  }, [currentLine, lines, speechConfigs, isPlaying]);
-
+  // tts autoscroll
   useEffect(() => {
     if (isUserScrollRef.current || !isPlaying) return;
-    isUserFocusRef.current = false;
+    scrollToLine(currentLine, 'smooth');
 
-    const timer = setTimeout(() => {
-      scrollToLine(currentLine);
-    }, 100);
-
-    return () => clearTimeout(timer);
-  }, [isPlaying, currentLine, scrollToLine]);
-
-  useEffect(() => {
-    if (!voice || availableVoices.length <= 2) return;
-
-    const found = availableVoices.find((v) => v.id === voice);
-
-    if (found) {
-      setSelectedVoice(found);
-    }
-  }, [availableVoices, voice]);
+    startTimer(() => setViewLine((prev) => (!isSearchJumpingRef.current && currentLine !== prev ? currentLine : prev)));
+  }, [isPlaying, currentLine, scrollToLine, startTimer, isSearchJumpingRef, isUserScrollRef, setViewLine]);
 
   // hijack the browser's default scroll
   useEffect(() => {
@@ -462,11 +153,8 @@ export const BookReader = () => {
 
       if (e.key === 'Escape') {
         e.preventDefault();
-        forceControl(true, 'focus');
-        document.body.focus();
-        if (activeElement instanceof HTMLElement) {
-          activeElement.blur();
-        }
+        ttsScroll();
+        focusBody();
         return;
       }
 
@@ -488,21 +176,18 @@ export const BookReader = () => {
       }
     };
 
-    const moveToLine = (lineIndex: number) => {
-      if (lineIndex == currentLine) return;
+    const moveToLine = (index: number) => {
+      if (index == currentLine) return;
 
-      scrollToLine(lineIndex, 'auto');
-      forceControl(false, 'focus');
-      updateCurrentLine(lineIndex);
+      scrollToLine(index, 'auto');
+      startFromLine(index);
 
-      if (isPlaying) {
-        speechService.resume(lineIndex, speechConfigs());
-      }
+      if (isPlaying) resume(index);
     };
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [currentLine, totalLines, handlePlayPause]);
+  }, [currentLine, startFromLine, totalLines, handlePlayPause, scrollToLine, ttsScroll, isPlaying, resume]);
 
   if (loading) {
     return (
@@ -512,641 +197,130 @@ export const BookReader = () => {
     );
   }
 
-  if (!book || error) {
+  if (!_id || !book) {
     return (
       <div className="absolute top-0 left-0 h-full w-full bg-white opacity-50 flex flex-col justify-center items-center gap-2">
-        {error}
         <Button onClick={() => navigateBack(true)}>Go Back</Button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-full relative overflow-hidden">
-      {/* Book Lines */}
-      <Virtuoso
-        id="book-lines"
-        ref={virtuosoRef}
-        className="w-full leading-loose transition-transform duration-500 ease-in-out"
-        style={{
-          minHeight: 'calc(100vh - 10px)',
-          height: '50vh',
-          maxHeight: '75%',
-        }}
-        data={lines}
-        initialTopMostItemIndex={{ index: 0, align: 'center' }}
-        increaseViewportBy={200}
-        endReached={(index) => {
-          if (!hasMore || loadingMore || isSearchJumping.current || isFetchingRef.current) return;
-          if (index < lines.length - 1) return;
-          loadMoreLines(lines.length);
-        }}
-        atBottomStateChange={(atBottom) => {
-          if (!atBottom || !hasMore || loadingMore || isFetchingRef.current) return;
-          loadMoreLines(lines.length);
-        }}
-        rangeChanged={(range) => {
-          const isVisible = currentLine >= range.startIndex && currentLine <= range.endIndex;
-          isfocusedIndexVisibleRef.current = focusedIndexRef.current >= range.startIndex && focusedIndexRef.current <= range.endIndex;
-          setShowJumpButton(!isVisible);
-        }}
-        components={{
-          Header: () => (
-            <header className="relative text-center my-6 mx-12">
-              <h3 className="font-semibold">{bookTitleWithAuthor(book)}</h3>
-            </header>
-          ),
-          List: forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ style, children, ...props }, ref) => (
-            <div
-              {...props}
-              ref={ref}
-              tabIndex={0}
-              onWheel={() => {
-                forceControl(true, 'focus');
-              }}
-              onTouchMove={() => {
-                forceControl(true, 'focus');
-              }}
-              className="outline-none list-none text-left pl-16 pr-12"
-              style={{ ...style, fontSize }}
-            >
-              {children}
-            </div>
-          )),
-          Footer: () => (
-            <div className="h-20 w-full flex justify-center items-center text-sm text-gray-300">
-              {loadingMore ? (
-                <span className="flex justify-center items-center">
-                  <Loader2 className="animate-spin mr-2" size={16} />
-                  &nbsp;Loading more...
-                </span>
-              ) : !hasMore ? (
-                <span>You've reach the end</span>
-              ) : null}
-            </div>
-          ),
-        }}
-        // Individual Line Item
-        itemContent={(index, line) => {
-          if (line.startsWith(IMAGE_MARKER)) {
-            const imageUrl = line.substring(IMAGE_MARKER.length);
-            return <img key={index} src={`${import.meta.env.VITE_API_URL}${imageUrl}`} alt={`${book.title}-image-${index}`} className="w-full h-auto rounded-lg my-6 shadow-sm" />;
-          }
+    <CommonContext.Provider
+      value={{
+        viewLine,
+        isPlaying,
+        handlePlayPause,
+        readingMode,
+        setReadingMode,
+        jumpToIndex,
+        jumpToRead: () => jumpToRead(currentLine),
+        userScroll,
+        navigateBack,
+        hydrateChapterByIndex,
+        handleLineClick,
+      }}
+    >
+      <BookContext.Provider value={{ _id, currentLine, totalLines, lastCompleted, bookmarks, setBookmarks, viewChapter, book, toggleBookmark, deleteLine }}>
+        <SearchContext.Provider value={{ searchInputRef, searchText, setSearchText, searchRes, currentMatch, prevMatch, nextMatch, openSearch, clearSearch }}>
+          <SettingContext.Provider value={{ fontSize, setFontSize, rate, setRate, setVoice, selectedVoice, lineHeight, setLineHeight, indent, setIndent, alignment, setAlignment, availableVoices }}>
+            <SpeechContext.Provider value={{ isPlaying, play, pause, resume: () => resume(currentLine), stop }}>
+              <div className="min-h-full relative overflow-hidden">
+                <BookHeader setOpenPanelLeft={setOpenPanelLeft} setOpenPanelRight={setOpenPanelRight} />
 
-          const isBookmarked = bookmarks.some((b) => b.index === index);
-
-          const isCurrentMatch = searchRes[currentMatch] === index;
-          const getHighlightedText = (text: string, highlight: string) => {
-            if (!highlight.trim()) return text;
-            const parts = text.split(new RegExp(`(${highlight})`, 'gi'));
-            return (
-              <span>
-                {parts.map((part, i) =>
-                  part.toLowerCase() === highlight.toLowerCase() ? (
-                    <mark key={i} className={`rounded-md py-1 outline-none bg-amber-200 ${isCurrentMatch ? 'bg-amber-500 ' : 'outline-none'}`}>
-                      {part}
-                    </mark>
-                  ) : (
-                    part
-                  ),
-                )}
-              </span>
-            );
-          };
-
-          const cleanLine = line.startsWith(CHAPTER_MARKER) ? line.substring(CHAPTER_MARKER.length) : line;
-
-          return (
-            <li
-              key={`line-${index}`}
-              id={`line-${index}`}
-              role="button"
-              tabIndex={index === currentLine || index === focusedIndexRef.current ? 0 : -1}
-              aria-current={index === currentLine ? 'location' : undefined}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                toggleBookmark(index, cleanLine);
-              }}
-              onDoubleClick={() => handleLineClick(index)}
-              className={`group relative cursor-pointer my-1 px-2 transition-colors duration-200 ease-in-out rounded-lg ${line.startsWith(CHAPTER_MARKER) ? 'font-semibold italic text-center uppercase tracking-widest' : ''} ${index === currentLine ? 'bg-amber-100 font-medium' : index === focusedIndexRef.current ? 'bg-gray-50' : 'hover:bg-gray-50'} focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-opacity-50 ${isBookmarked ? 'border border-r-4 border-amber-400 pr-2' : 'border-r-4 border-transparent'}`}
-            >
-              {searchText ? getHighlightedText(cleanLine, searchText) : cleanLine}
-
-              {readingMode === 'edit' ? (
-                <Button
-                  variant="ghost"
-                  aria-label="Delete this line from the book"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteLine(index);
+                {/* Book Lines */}
+                <Virtuoso
+                  id="book-lines"
+                  ref={virtuosoRef}
+                  className="fixed top-20 leading-loose transition-transform duration-500 ease-in-out"
+                  style={{ minHeight: 'calc(100vh - 5rem)' }}
+                  data={lines}
+                  initialTopMostItemIndex={{ index: 0, align: 'center' }}
+                  increaseViewportBy={200}
+                  endReached={(index) => {
+                    if (!canFetch || isSearchJumpingRef.current) return;
+                    if (index < lines.length - 1) return;
+                    loadMoreLines(lines.length);
                   }}
-                  title="Delete this line from the book"
-                  className={`absolute -right-9 top-0 text-gray-400 hover:opacity-100 transition-opacity duration-150 ${isBookmarked ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}`}
-                >
-                  <X size={16} fill="currentColor" />
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  tabIndex={index === currentLine ? 0 : -1}
-                  aria-label={`${isBookmarked ? 'Remove' : 'Add'} bookmark for line ${index + 1}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleBookmark(index, cleanLine);
+                  atBottomStateChange={(atBottom) => {
+                    if (!canFetch || !atBottom) return;
+                    loadMoreLines(lines.length);
                   }}
-                  title={isBookmarked ? 'Remove Bookmark' : 'Add Bookmark'}
-                  className={`absolute -right-9 top-0 text-amber-400 hover:opacity-100 transition-opacity duration-150 ${isBookmarked ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}`}
-                >
-                  <Bookmark size={16} fill="currentColor" />
-                </Button>
-              )}
-            </li>
-          );
-        }}
-      />
-
-      {/* Scrollbar Marker */}
-      <div
-        id="scrollbar-marker"
-        className="absolute top-3 right-0.5 w-3 pointer-events-none z-10 transition-transform duration-500 ease-in-out"
-        style={{
-          minHeight: 'calc(100vh - 10px - 1.5rem)',
-          height: 'calc(50vh - 1.5rem)',
-          maxHeight: 'calc(75% - 1.5rem)',
-        }}
-      >
-        <Button
-          variant="ghost"
-          tabIndex={-1}
-          onClick={() => jumpToRead('focus')}
-          title="Jump to read"
-          className={`absolute right-0 w-full h-1 rounded-full bg-amber-200 cursor-pointer pointer-events-auto transition-all duration-300 p-0! hover:scale-125`}
-          style={{
-            top: `${calculateProgress(currentLine, lines.length - 1)}%`,
-            transform: 'translateY(-50%)',
-          }}
-        />
-      </div>
-
-      {/* Indicator Message */}
-      <div
-        id="indicator-message"
-        className={`fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-4 justify-center items-center rounded-2xl p-6 z-10 pointer-events-none bg-amber-200 backdrop-blur-mg shadow-lg transition-all duration-300 ease-out ${indicatorMessage ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}
-      >
-        {indicatorMessage}
-      </div>
-
-      {/* Control Panel */}
-      <div
-        id="control-panel"
-        className="fixed top-1/2 -translate-y-1/2 left-2 h-auto text-sm text-gray-400 flex flex-col items-start gap-1 rounded-full bg-transparent z-10 *:flex *:items-center [&>button]:ml-1! [&>button]:bg-transparent [&>button:enabled]:hover:bg-amber-200 [&>button:enabled]:hover:text-gray-600 [&>button:disabled]:hover:transparent [&>button:disabled]:hover:text-default [&>button]:rounded-full! select-none"
-      >
-        {/* Jump to Line */}
-        <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent [&>button:enabled]:hover:bg-amber-200 [&>button:enabled]:hover:text-gray-600 [&>button:disabled]:hover:transparent [&>button:disabled]:hover:text-default *:rounded-full!">
-          {/* Jump to start */}
-          <Button
-            variant="ghost"
-            id="jump-to-start"
-            title="Jump To Start"
-            onClick={() => {
-              jumpToIndex(0);
-              forceControl(true, 'user');
-            }}
-          >
-            <ArrowBigUp size={16} />
-          </Button>
-
-          {/* Jump to read button */}
-          <Button variant="ghost" id="jump-to-read" title="Jump To Read" onClick={() => jumpToRead('focus')} className={showJumpButton ? 'text-gray-600!' : 'text-inherit'}>
-            <MapPin size={16} />
-          </Button>
-
-          {/* Jump to end */}
-          {FEATURES.ENABLE_SCROLL_TO_END && (
-            <Button
-              variant="ghost"
-              id="jump-to-end"
-              title="Jump To End"
-              onClick={() => {
-                jumpToIndex(totalLines - 1);
-                forceControl(true, 'user');
-              }}
-            >
-              <ArrowBigDown size={16} />
-            </Button>
-          )}
-        </div>
-
-        {/* Bookmarks */}
-        <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:hover:bg-amber-200! *:hover:text-gray-600 *:rounded-full!">
-          {/* Select Bookmark */}
-          <Select
-            onValueChange={(val) => {
-              if (!val) return;
-              jumpToIndex(parseInt(val), 'user', true);
-            }}
-          >
-            <SelectTrigger
-              title="Bookmarks"
-              onClick={() => {
-                if (isPlaying) isUserFocusRef.current = true;
-              }}
-              className="h-8 w-8 [&>svg]:hidden border-none"
-            >
-              <span>
-                <Bookmark size={16} />
-              </span>
-              <SelectValue placeholder="Bookmarks" className="sr-only [&>svg]:hidden" />
-            </SelectTrigger>
-            <SelectContent align="end">
-              <SelectGroup>
-                <SelectItem value="none" disabled className="text-muted-foreground">
-                  {bookmarks.length > 0 ? 'Bookmarks' : 'No Bookmarks'}
-                </SelectItem>
-                {bookmarks.map((bookmark) => (
-                  <SelectItem key={`bookmark-${bookmark.index}`} value={bookmark.index.toString()} className="[&>span>span>svg]:hidden border-none">
-                    {bookmark.text} ({bookmark.index + 1})
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-
-          {/* Save Bookmarks to Local */}
-          {FEATURES.ENABLE_BOOKMARK_EDIT && (
-            <Button
-              variant="ghost"
-              disabled={!book?.title || bookmarks.length === 0}
-              onClick={() => {
-                if (!book?.title || bookmarks.length === 0) return;
-                const titleWithAuthor = bookTitleWithAuthor(book);
-                if (!confirm(`Overwrite local bookmarks for ${titleWithAuthor}?`)) return;
-                saveBookmarksToLocal(titleWithAuthor, bookmarks);
-              }}
-              title="Save bookmarks to local"
-            >
-              <Save size={16} />
-            </Button>
-          )}
-
-          {/* Import Bookmarks */}
-          {FEATURES.ENABLE_BOOKMARK_EDIT && (
-            <Button
-              variant="ghost"
-              disabled={!book?.title}
-              onClick={async () => {
-                if (!_id || !book?.title) return;
-                const titleWithAuthor = bookTitleWithAuthor(book);
-                if (!confirm(`Import bookmarks for ${titleWithAuthor} from last saved?`)) return;
-                const merged = await importBookmarksFromLocal(_id, titleWithAuthor, bookmarks);
-                if (!merged || merged.length === 0) return;
-                setBookmarks(merged);
-                alert(`Imported ${merged.length} bookmarks for ${titleWithAuthor}!`);
-                setTimeout(() => {
-                  console.log(`updatedBook, canUpdate :`, updatedBook, canUpdate);
-                  flushUpdate();
-                }, 100);
-              }}
-              title="Import bookmarks from last saved"
-            >
-              <BookmarkPlus size={16} />
-            </Button>
-          )}
-
-          {/* Clear Bookmarks */}
-          <Button
-            variant="ghost"
-            disabled={!book?.title || bookmarks.length === 0}
-            onClick={() => {
-              if (!confirm(`Deleted all ${bookmarks.length} bookmarks for [${book?.title}]?`)) return;
-              setBookmarks([]);
-            }}
-            title={`Deleted all ${bookmarks.length} bookmarks for [${book.title}]`}
-          >
-            <BookmarkX size={16} />
-          </Button>
-        </div>
-
-        {/* Jump to Chapter */}
-        {book?.chapters.length > 1 && (
-          <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:hover:bg-amber-200! *:hover:text-gray-600 *:rounded-full!">
-            <Button
-              variant="ghost"
-              id="prev-chapter"
-              disabled={currentChapter === 0}
-              onClick={() => {
-                if (isPlaying) isUserFocusRef.current = true;
-                const targetChapterIndex = Math.max(0, currentChapter - 1);
-                jumpToIndex(book.chapters[targetChapterIndex].startIndex);
-              }}
-              title="Prev chapter"
-            >
-              <ListStart size={16} />
-            </Button>
-
-            {/* Select Chapter */}
-            <Select
-              value={currentChapter.toString()}
-              onValueChange={async (val) => {
-                if (!val) return;
-                const targetChapterIndex = parseInt(val);
-                const chapter = book.chapters[targetChapterIndex];
-                let targetLineIndex = chapter.startIndex;
-                if (targetLineIndex === undefined) {
-                  console.log(`🚰 JIT: Hydrating target chapter ${targetChapterIndex} before jump...`);
-
-                  // This call should return the updated book with the new startIndex
-                  const updatedBook = await hydrateChapterByIndex(targetChapterIndex);
-                  if (updatedBook && updatedBook.chapters[targetChapterIndex].startIndex) {
-                    targetLineIndex = updatedBook.chapters[targetChapterIndex].startIndex;
-                  } else {
-                    console.error(`❌ Failed to hydrate chapter ${targetLineIndex}:`, error);
-                    return;
-                  }
-                }
-                jumpToIndex(targetLineIndex);
-              }}
-            >
-              <SelectTrigger
-                title="Chapters"
-                onClick={() => {
-                  if (isPlaying) isUserFocusRef.current = true;
-                }}
-                className="h-8 w-8 [&>svg]:hidden border-none"
-              >
-                <span>
-                  <TableOfContents size={16} />
-                </span>
-                <SelectValue placeholder="Chapters" className="sr-only" />
-              </SelectTrigger>
-              <SelectContent align="end">
-                <SelectGroup>
-                  {book.chapters
-                    .filter((chapter) => chapter.isLoaded)
-                    .map((chapter, index) => (
-                      <SelectItem key={`chapter-${index}`} value={index.toString()}>
-                        {`${chapter.title}${chapter.startIndex ? `(${chapter.startIndex})` : ''}`}
-                      </SelectItem>
-                    ))}
-                  <SelectItem value="none" disabled className="text-muted-foreground">
-                    ... load more chapters
-                  </SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-
-            <Button
-              variant="ghost"
-              id="next-chapter"
-              disabled={currentChapter === book.chapters.length - 1}
-              onClick={() => {
-                if (isPlaying) isUserFocusRef.current = true;
-                const targetChapterIndex = Math.min(currentChapter + 1, book.chapters.length - 1);
-                jumpToIndex(book.chapters[targetChapterIndex].startIndex);
-              }}
-              title="Next chapter"
-            >
-              <ListEnd size={16} />
-            </Button>
-          </div>
-        )}
-
-        {/* Text Size */}
-        <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent [&>button:enabled]:hover:bg-amber-200 [&>button:enabled]:hover:text-gray-600 [&>button:disabled]:hover:transparent [&>button:disabled]:hover:text-default *:rounded-full!">
-          <Button variant="ghost" id="text-size-up" onClick={() => setFontSize(fontSize + 1)} title="Text Size Up">
-            <Plus size={16} />
-          </Button>
-
-          <span title="Text Size" className="h-8 w-8 pl-2 text-xs bg-transparent! text-gray-600 cursor-default">
-            {fontSize}
-          </span>
-
-          <Button variant="ghost" id="text-size-down" onClick={() => setFontSize(fontSize - 1)} title="Text Size Down">
-            <Minus size={16} />
-          </Button>
-        </div>
-
-        {/* Play/Pause */}
-        <Button variant="ghost" id={isPlaying ? 'pause' : 'play'} onClick={handlePlayPause} title={isPlaying ? 'Pause' : 'Play'} className={isPlaying ? 'text-gray-600' : 'text-green-600'}>
-          {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-        </Button>
-
-        {/* Voice & Rate */}
-        <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:hover:bg-amber-200! *:hover:text-gray-600 *:rounded-full!">
-          {/* Select Voice */}
-          <Select
-            value={selectedVoice.id}
-            onValueChange={async (val) => {
-              if (!val) return;
-              const found = availableVoices.find((voiceOption) => voiceOption.id === val);
-              if (found) setSelectedVoice(found);
-              speechService.stop();
-            }}
-          >
-            <SelectTrigger
-              title="Select Voice"
-              onClick={() => {
-                if (isPlaying) isUserFocusRef.current = true;
-              }}
-              className="h-8 w-8 [&>svg]:hidden border-none"
-            >
-              <span>
-                <UsersRound size={16} />
-              </span>
-              <SelectValue placeholder={selectedVoice.id} className="sr-only" />
-            </SelectTrigger>
-            <SelectContent align="end">
-              <SelectGroup>
-                <SelectItem value="none" disabled className="text-muted-foreground">
-                  Speech Voices
-                </SelectItem>
-                {availableVoices.map((voice) => (
-                  <SelectItem key={`voice-${voice.id}`} value={voice.id} disabled={!voice.enabled}>
-                    {voice.displayName}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-
-          {/* Select Speech Rate */}
-          <Select
-            value={speechRate.toString()}
-            onValueChange={async (val) => {
-              if (!val) return;
-              const newRate = parseFloat(val);
-              setSpeechRate(newRate);
-
-              toggleIndicatorMessage(renderRateIndicator(newRate));
-              if (isPlaying) {
-                speechService.resume(currentLine, speechConfigs(newRate));
-              }
-            }}
-          >
-            <SelectTrigger
-              title="Speech Rate"
-              onClick={() => {
-                if (isPlaying) isUserFocusRef.current = true;
-              }}
-              className="h-8 w-8 [&>svg]:hidden border-none"
-            >
-              <span>
-                <AudioLines size={16} />
-              </span>
-              <SelectValue placeholder={selectedVoice.id} className="sr-only" />
-            </SelectTrigger>
-            <SelectContent align="end">
-              <SelectGroup>
-                <SelectItem value="none" disabled className="text-muted-foreground">
-                  Speech Rates
-                </SelectItem>
-                {SPEECH_RATE_OPTIONS.map((rate) => (
-                  <SelectItem key={`rate-${rate}`} value={rate.toString()}>
-                    {rate}x
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Search text */}
-        <span
-          id="search"
-          tabIndex={0}
-          onClick={() => {
-            forceControl(true, 'search');
-            setTimeout(() => {
-              searchInputRef.current?.focus();
-            }, 100);
-          }}
-          onKeyDown={(e) => {
-            e.stopPropagation();
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              forceControl(true, 'search');
-              setTimeout(() => {
-                searchInputRef.current?.focus();
-              }, 100);
-            }
-          }}
-          title="Search text"
-          className={`mx-1 h-8 min-w-8 px-2 rounded-full transition-all duration-200 gap-0! ${readingMode === 'search' ? 'bg-amber-200 shadow-md' : 'bg-inherit'} cursor-pointer hover:bg-amber-200 hover:text-gray-600`}
-        >
-          <Search size={16} className={`shrink-0 ${readingMode === 'search' ? 'text-gray-600' : 'text-inherit'}`} />
-          {readingMode === 'search' && (
-            <div className="flex items-center animate-in fade-in slide-in-from-left-2 duration-200">
-              <Input
-                id="search-text"
-                name="search-text"
-                type="text"
-                ref={searchInputRef}
-                value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={async (e) => {
-                  e.stopPropagation();
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (e.shiftKey) {
-                      await prevMatch();
-                    } else {
-                      await nextMatch();
-                    }
-                  }
-                  if (e.key === 'Escape') {
-                    clearSearch();
-                    setReadingMode('focus');
-                  }
-                }}
-                // className="h-4 outline-none text-gray-600"
-
-                className="h-6 ml-2 px-1 outline-none border-none focus:ring-0 focus-visible:ring-0 text-gray-700 placeholder:text-gray-500/50"
-                placeholder="Search..."
-                style={{
-                  width: searchText.length > 0 ? `${Math.min(searchText.length + 2, 20)}ch` : '8ch',
-                }}
-              />
-              {searchText.length > 0 && (
-                <Button
-                  variant="ghost"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    clearSearch();
-                    setReadingMode(readingMode);
+                  rangeChanged={(range) => {
+                    isViewLineVisibleRef.current = viewLine >= range.startIndex && viewLine <= range.endIndex;
                   }}
-                  className="p-0! text-gray-600 transition-colors"
-                  title="Clear search"
-                >
-                  <X size={14} />
-                </Button>
-              )}
-              {searchRes.length > 0 && (
-                <div className={`flex items-center border-l pl-1 mx-1 text-xs text-gray-400/60 animate-in fade-in ${readingMode !== 'search' ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {currentMatch + 1}/{searchRes.length}
+                  components={{
+                    List: forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ style, children, ...props }, ref) => (
+                      <div
+                        {...props}
+                        ref={ref}
+                        tabIndex={0}
+                        onWheel={() => {
+                          userScroll();
+                          setReadingMode('tts');
+                        }}
+                        onTouchMove={() => {
+                          userScroll();
+                          setReadingMode('tts');
+                        }}
+                        className="top-20 outline-none list-none text-left mx-auto md:w-4/7"
+                        style={{ ...style, fontSize, lineHeight, textAlign: alignment, width: `calc(4 / 7 * 100% - ${indent}ch)` }}
+                      >
+                        {children}
+                      </div>
+                    )),
+                    Footer: () => (
+                      <div className="h-20 w-full flex justify-center items-center text-sm text-gray-300">
+                        {loadingMore ? (
+                          <span className="flex justify-center items-center">
+                            <Loader2 className="animate-spin mr-2" size={16} />
+                            &nbsp;Loading more...
+                          </span>
+                        ) : !hasMore ? (
+                          <span>You've reach the end</span>
+                        ) : null}
+                      </div>
+                    ),
+                  }}
+                  // Individual Line Item
+                  itemContent={(index, line) => <BookLine index={index} line={line} />}
+                />
+
+                {/* Scrollbar Marker */}
+                <div id="scrollbar-marker" className="absolute top-20 right-0.5 w-3 pointer-events-none z-10 transition-transform duration-500 ease-in-out" style={{ minHeight: 'calc(100vh - 5rem)' }}>
+                  <Button
+                    variant="ghost"
+                    tabIndex={-1}
+                    onClick={() => jumpToRead(currentLine)}
+                    title="Jump to read"
+                    className={`absolute right-0 w-full h-1 rounded-full bg-highlight cursor-pointer pointer-events-auto transition-all duration-300 p-0! hover:scale-125`}
+                    style={{
+                      top: `${calculateProgress(currentLine, lines.length - 1)}%`,
+                      transform: 'translateY(-50%)',
+                    }}
+                  />
                 </div>
-              )}
-            </div>
-          )}
-        </span>
 
-        {/* Edit book */}
-        {FEATURES.ENABLE_LINE_EDIT && (
-          <Button
-            variant="ghost"
-            id="edit-book"
-            onClick={() => {
-              if (readingMode !== 'edit') {
-                forceControl(true, 'edit');
-              } else {
-                forceControl(false, 'focus');
-              }
-            }}
-            title="Edit book"
-            className={readingMode === 'edit' ? 'text-gray-600 bg-green-400!' : 'text-inherit bg-inherit'}
-          >
-            <ListX size={16} />
-          </Button>
-        )}
+                {/* Left Panel */}
+                <SidePanelLeft
+                  open={openPanelLeft}
+                  onOpenChange={() => setOpenPanelLeft(false)}
+                  onUpdateBookmark={(merged: BookMark[]) => {
+                    setBookmarks(merged);
+                    alert(`Imported ${merged.length} bookmarks for ${bookTitleWithAuthor(book)}!`);
+                    setTimeout(() => {
+                      flushUpdate();
+                    }, 100);
+                  }}
+                />
 
-        <div className="my-1 p-1! flex flex-col items-start gap-1 rounded-full shadow *:flex *:items-center *:py-1 *:bg-transparent *:hover:bg-amber-200 *:hover:text-gray-600 *:rounded-full!">
-          <span title={bookTitleWithAuthor(book)} className="h-8 w-8 pl-2 text-xs text-gray-600 bg-transparent! cursor-default">
-            <BookIcon size={16} />
-          </span>
-
-          {/* Progress Indicator */}
-          {book?.chapters.at(-1)?.isLoaded !== false ? (
-            <span title={`Progress: Line ${currentLine} of ${totalLines}`} className="h-8 w-8 flex justify-center items-center text-xs text-gray-600 bg-transparent! cursor-default">
-              {calculateProgress(currentLine, totalLines)}%
-            </span>
-          ) : null}
-
-          {/* Nav back to books */}
-          <Button variant="ghost" id="back-to-books" onClick={() => navigateBack()} title="Back to Books">
-            <LibraryBig size={16} />
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const renderRateIndicator = (rate: number) => (
-  <>
-    <AudioLines size={24} />
-    <span className="font-semibold text-xl whitespace-nowrap">{rate}x</span>
-  </>
-);
-
-const renderChapterIndicator = (chapter: Chapter) => {
-  if (!chapter?.title) return <></>;
-
-  return (
-    <>
-      <TableOfContents size={24} />
-      <span className="font-semibold text-xl whitespace-nowrap">
-        {chapter.title} ({chapter.startIndex})
-      </span>
-    </>
+                {/* Right Panel */}
+                <SidePanelRight open={openPanelRight} onOpenChange={() => setOpenPanelRight(false)} />
+              </div>
+            </SpeechContext.Provider>
+          </SettingContext.Provider>
+        </SearchContext.Provider>
+      </BookContext.Provider>
+    </CommonContext.Provider>
   );
 };
