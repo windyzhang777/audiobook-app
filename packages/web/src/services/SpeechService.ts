@@ -1,6 +1,6 @@
 import { VOICE_FALLBACK, type VoiceOption } from '@/common/useBookSettings';
 import { TTSNative } from '@/services/TTSNative';
-import { CHAPTER_MARKER, IMAGE_MARKER, MAX_BOOKMARK_TEXT, type BookContent, type SpeechOptions } from '@audiobook/shared';
+import { hasMarker, MAX_BOOKMARK_TEXT, type BookContent, type SpeechOptions } from '@audiobook/shared';
 
 export type SpeechStatus = 'idle' | 'speaking' | 'paused' | 'loading';
 
@@ -68,7 +68,7 @@ export class SpeechService {
     }
 
     // Skip reading image and chapter title
-    if (configs.lines[index].startsWith(CHAPTER_MARKER) || configs.lines[index].startsWith(IMAGE_MARKER)) {
+    if (hasMarker(configs.lines[index])) {
       console.warn(`⚠️ [Skip] no utterance line:`, configs.lines[index]);
       // Skip image lines but trigger line end to update progress
       const next = index + 1;

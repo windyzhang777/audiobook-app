@@ -62,10 +62,12 @@ export const useCommonContext = () => {
 
 type IBookContext = Omit<
   Required<Book>,
-  'userId' | 'title' | 'author' | 'source' | 'localPath' | 'coverPath' | 'extractedImages' | 'bookUrl' | 'fileType' | 'chapters' | 'createdAt' | 'lastReadAt' | 'updatedAt'
+  'userId' | 'title' | 'author' | 'source' | 'localPath' | 'coverPath' | 'extractedImages' | 'bookUrl' | 'fileType' | 'createdAt' | 'lastReadAt' | 'updatedAt'
 > & {
   viewChapter: (Chapter & { chapterIndex: number }) | undefined;
   book: Book | undefined;
+  setChapters: Dispatch<SetStateAction<Chapter[]>>;
+  toggleChapter: (index: number, text: string) => void;
   setBookmarks: Dispatch<SetStateAction<BookMark[]>>;
   toggleBookmark: (index: number, text: string) => void;
   setHighlights: Dispatch<SetStateAction<HighLight[]>>;
@@ -77,6 +79,9 @@ const defaultBookContext: IBookContext = {
   currentLine: 0,
   totalLines: 0,
   lastCompleted: '',
+  chapters: [],
+  setChapters: () => {},
+  toggleChapter: () => {},
   bookmarks: [],
   setBookmarks: () => {},
   toggleBookmark: () => {},
@@ -99,6 +104,9 @@ export const useBookContext = () => {
     currentLine: bookContext.currentLine,
     totalLines: bookContext.totalLines,
     lastCompleted: bookContext.lastCompleted,
+    chapters: bookContext.chapters,
+    setChapters: bookContext.setChapters,
+    toggleChapter: bookContext.toggleChapter,
     bookmarks: bookContext.bookmarks,
     setBookmarks: bookContext.setBookmarks,
     toggleBookmark: bookContext.toggleBookmark,

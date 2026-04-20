@@ -8,6 +8,7 @@ import {
   Chapter,
   CHAPTER_MARKER,
   CHAPTER_SIZE,
+  DELETE_MARKER,
   FONT_SIZE_DEFAULT,
   INDENT_DEFAULT,
   LINE_HEIGHT_DEFAULT,
@@ -114,8 +115,8 @@ export class BookService {
     }
 
     console.log(`[JIT] Hydrating Chapter ${chapterIndex} / ${book?.chapters.length}: ${chapter.title}`);
-    await this.fetchAndSaveChapter(bookId, chapter, chapterIndex);
 
+    await this.fetchAndSaveChapter(bookId, chapter, chapterIndex);
     return await this.bookRepository.getById(bookId);
   };
 
@@ -341,7 +342,7 @@ export class BookService {
     return updated;
   };
 
-  deleteContent = async (_id: string, lineIndex: number) => {
+  deleteContent = async (_id: string, index: number) => {
     let book = await this.bookRepository.getById(_id);
     if (!book) {
       throw new Error(`Book with ID ${_id} not found`);
@@ -352,14 +353,19 @@ export class BookService {
       throw new Error(`Content for book with ID ${_id} not found`);
     }
 
-    if (lineIndex < 0 || lineIndex >= content.lines.length) {
-      throw new Error(`Line index ${lineIndex} is out of bounds`);
+    if (index < 0 || index >= content.lines.length) {
+      throw new Error(`Line index ${index} is out of bounds`);
     }
 
-    // Remove the specified line
-    content.lines.splice(lineIndex, 1);
+    // Mark line as deleted
+    content.lines[index] = DELETE_MARKER + content.lines[index];
 
-    await this.bookRepository.updateBook(_id, { totalLines: content.lines.length });
+    // Clean up metadata
+    const chapters = (book.chapters || []).filter((c) => c.startIndex !== index && c.source !== '' + index);
+    const bookmarks = (book.bookmarks || []).filter((b) => b.index !== index);
+    const highlights = (book.highlights || []).filter((h) => !h.indices.includes(index));
+
+    await this.bookRepository.updateBook(_id, { chapters, bookmarks, highlights });
     await this.bookRepository.setContent(_id, content);
   };
 
@@ -406,14 +412,19 @@ export class BookService {
       throw new Error(`Content for book with ID ${_id} not found`);
     }
 
-    const normalizedQuery = query.toLowerCase();
     const matches: SearchMatch[] = [];
 
-    content.lines.forEach((line, index) => {
-      if (line.toLowerCase().includes(normalizedQuery)) {
-        matches.push({ index, text: line });
-      }
-    });
+    try {
+      const regex = new RegExp(query, 'ig');
+      content.lines.forEach((line, index) => {
+        if (regex.test(line) && !line.startsWith(DELETE_MARKER)) {
+          matches.push({ index, text: line });
+        }
+      });
+    } catch (e) {
+      console.error('Invalid Regex pattern', e);
+      return [];
+    }
 
     return matches;
   };

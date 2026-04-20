@@ -13,7 +13,7 @@ interface BookHeaderProps {
 }
 
 export const BookHeader = ({ setOpenPanelLeft, setOpenPanelRight }: BookHeaderProps) => {
-  const { book, currentLine, viewChapter, totalLines } = useBookContext();
+  const { book, currentLine, chapters, viewChapter, totalLines } = useBookContext();
   const { viewLine, isPlaying, handlePlayPause, readingMode, jumpToIndex, userScroll, jumpToRead, navigateBack } = useCommonContext();
   const { searchInputRef, searchText, setSearchText, openSearch, closeSearch, prevMatch, nextMatch } = useSearchContext();
   if (!book || currentLine === undefined) return null;
@@ -49,10 +49,10 @@ export const BookHeader = ({ setOpenPanelLeft, setOpenPanelRight }: BookHeaderPr
             id="prev-chapter"
             disabled={viewChapter?.chapterIndex === 0}
             onClick={async () => {
-              if (!book || !viewChapter) return;
+              if (!chapters || !viewChapter) return;
               if (isPlaying) userScroll();
               const targetChapterIndex = Math.max(0, viewLine > (viewChapter.startIndex ?? 0) ? viewChapter.chapterIndex : viewChapter.chapterIndex - 1);
-              await jumpToIndex(book.chapters[targetChapterIndex].startIndex);
+              await jumpToIndex(chapters[targetChapterIndex].startIndex);
             }}
             title="Previous Chapter"
           >
@@ -64,12 +64,12 @@ export const BookHeader = ({ setOpenPanelLeft, setOpenPanelRight }: BookHeaderPr
             size="icon"
             variant="ghost"
             id="next-chapter"
-            disabled={!book?.chapters || viewChapter?.chapterIndex === book.chapters.length - 1}
+            disabled={chapters.length < 1 || viewChapter?.chapterIndex === chapters.length - 1}
             onClick={async () => {
               if (!book || !viewChapter) return;
               if (isPlaying) userScroll();
-              const targetChapterIndex = Math.min(viewChapter.chapterIndex + 1, book.chapters.length - 1);
-              await jumpToIndex(book.chapters[targetChapterIndex].startIndex);
+              const targetChapterIndex = Math.min(viewChapter.chapterIndex + 1, chapters.length - 1);
+              await jumpToIndex(chapters[targetChapterIndex].startIndex);
             }}
             title="Next Chapter"
           >

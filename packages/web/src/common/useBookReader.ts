@@ -1,5 +1,5 @@
 import { api } from '@/services/api';
-import { getNowISOString, MAX_BOOKMARK_TEXT, PAGE_SIZE, type Book, type BookContent } from '@audiobook/shared';
+import { DELETE_MARKER, getNowISOString, IMAGE_MARKER, MAX_BOOKMARK_TEXT, PAGE_SIZE, removeMarker, type Book, type BookContent } from '@audiobook/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { triggerSuccess } from './triggerSuccess';
 import { useBookUpdate } from './useBookUpdate';
@@ -15,25 +15,25 @@ export function useBookReader(_id: string | undefined) {
 
   const [currentLine, setCurrentLine] = useState<Book['currentLine']>(0);
   const [lastCompleted, setlastCompleted] = useState<NonNullable<Book['lastCompleted']>>('');
+  const [chapters, setChapters] = useState<NonNullable<Book['chapters']>>([]);
   const [bookmarks, setBookmarks] = useState<NonNullable<Book['bookmarks']>>([]);
   const [highlights, setHighlights] = useState<NonNullable<Book['highlights']>>([]);
 
-  const isFetchingRef = useRef(false);
-
-  const updates: Partial<Book> = useMemo(() => ({ currentLine, lastCompleted, bookmarks, highlights }), [currentLine, lastCompleted, bookmarks, highlights]);
+  const updates: Partial<Book> = useMemo(() => ({ currentLine, lastCompleted, chapters, bookmarks, highlights }), [currentLine, lastCompleted, chapters, bookmarks, highlights]);
   const canUpdate =
     !loading &&
     !loadingMore &&
-    JSON.stringify(updates) !== JSON.stringify({ currentLine: book?.currentLine, lastCompleted: book?.lastCompleted, bookmarks: book?.bookmarks, highlights: book?.highlights });
-  const canFetch = useMemo(() => _id && hasMore && !loadingMore && !isFetchingRef.current, [_id, hasMore, loadingMore]);
+    JSON.stringify(updates) !==
+      JSON.stringify({ currentLine: book?.currentLine, lastCompleted: book?.lastCompleted, chapters: book?.chapters, bookmarks: book?.bookmarks, highlights: book?.highlights });
+
+  const isFetchingRef = useRef(false);
+  const canFetch = useMemo(() => _id && hasMore, [_id, hasMore]);
 
   const loadBookContent = useCallback(
     async (offset: number = 0, limit: number = PAGE_SIZE) => {
       if (!_id) return;
 
-      isFetchingRef.current = true;
       setLoadingMore(true);
-
       try {
         const content = await api.books.getContent(_id, offset, limit);
         if (!content) return;
@@ -43,7 +43,6 @@ export function useBookReader(_id: string | undefined) {
         setHasMore(content.pagination.hasMore);
       } finally {
         setLoadingMore(false);
-        isFetchingRef.current = false;
       }
     },
     [_id],
@@ -51,54 +50,55 @@ export function useBookReader(_id: string | undefined) {
 
   const hydrateChapterByIndex = useCallback(
     async (chapterIndex: number) => {
-      if (!_id || !book || book.source !== 'web') return;
-
-      console.log(`[JIT] Hydrating Chapter ${chapterIndex} / ${book?.chapters.length}: ${book.chapters[chapterIndex].title}`);
+      if (!_id) return;
 
       try {
         const updatedBook = await api.books.hydrateChapter(_id, chapterIndex);
         if (!updatedBook) return;
 
         setBook(updatedBook);
+
+        if (updatedBook.chapters) {
+          setChapters(updatedBook.chapters);
+        }
+
         if (updatedBook.totalLines > totalLines) {
           setTotalLines(updatedBook.totalLines);
         }
-        // const nextUnloadedIndex = updatedBook.chapters.findIndex((chapter) => !chapter.isLoaded);
-        // const lastLoadedChapter = updatedBook.chapters[nextUnloadedIndex - 1];
-        // if (!isSearchJumping.current) toggleIndicatorMessage(renderChapterIndicator(lastLoadedChapter));
         return updatedBook;
       } catch (error) {
         console.error(`❌ Failed to hydrate chapter ${chapterIndex}:`, error);
       }
     },
-    [_id, book, totalLines],
+    [_id, totalLines],
   );
 
   const hydrateNextChapterIfNeeded = useCallback(
     async (_id: string, requestedEnd: number) => {
-      if (!_id || !book?.chapters || book.chapters.length === 0 || book.source !== 'web') return;
+      if (!_id || chapters.length === 0) return;
 
       // Load chapters until the the next chapter after the currentLine
-      const nextUnloadedIndex = book.chapters.findIndex((chapter) => !chapter.isLoaded);
+      const nextUnloadedIndex = chapters.findIndex((chapter) => !chapter.isLoaded);
       if (nextUnloadedIndex - 1 === -1 || nextUnloadedIndex === -1) return; // All chapters loaded
 
-      const lastLoadedChapter = book.chapters[nextUnloadedIndex - 1];
+      const lastLoadedChapter = chapters[nextUnloadedIndex - 1];
       if (!lastLoadedChapter?.title || (lastLoadedChapter.startIndex && lastLoadedChapter.startIndex >= requestedEnd)) return;
 
+      console.log(`[JIT] Hydrating Chapter ${nextUnloadedIndex} / ${chapters.length}: ${chapters[nextUnloadedIndex].title}`);
       await hydrateChapterByIndex(nextUnloadedIndex);
     },
-    [book, hydrateChapterByIndex],
+    [chapters, hydrateChapterByIndex],
   );
 
   const loadMoreLines = useCallback(
     async (offset: number = 0, limit: number = PAGE_SIZE) => {
-      if (!_id || !canFetch) return;
+      if (!_id || !canFetch || isFetchingRef.current) return;
 
-      const loadedCount = lines.length;
       const requestedEnd = offset + limit;
       // no need to fetch if requested range is already covered
-      if (requestedEnd <= loadedCount) return;
+      if (requestedEnd <= lines.length) return;
 
+      console.log(`[Flow] Loading more: current ${lines.length} -> ${requestedEnd} `);
       isFetchingRef.current = true;
       setLoadingMore(true);
 
@@ -109,14 +109,26 @@ export function useBookReader(_id: string | undefined) {
 
         await loadBookContent(offset, limit);
       } finally {
-        setLoadingMore(false);
         isFetchingRef.current = false;
+        setLoadingMore(false);
       }
     },
-    [_id, canFetch, loadBookContent, lines.length, book?.source, hydrateNextChapterIfNeeded],
+    [_id, canFetch, lines.length, loadBookContent, book?.source, hydrateNextChapterIfNeeded],
   );
 
+  const toggleChapter = (index: number, text: string) => {
+    if (text.startsWith(IMAGE_MARKER)) return;
+    setChapters((prev) => {
+      const exists = prev.find((c) => c.startIndex === index);
+      if (exists) {
+        return prev.filter((c) => c.startIndex !== index);
+      }
+      return [...prev, { title: removeMarker(text), source: '' + index, isLoaded: true, startIndex: index }].sort((a, b) => a.startIndex! - b.startIndex!);
+    });
+  };
+
   const toggleBookmark = (index: number, text: string) => {
+    if (text.startsWith(IMAGE_MARKER)) return;
     const truncatedText = text.length > MAX_BOOKMARK_TEXT ? text.slice(0, MAX_BOOKMARK_TEXT) + '...' : text;
     setBookmarks((prev) => {
       const exists = prev.find((b) => b.index === index);
@@ -128,6 +140,7 @@ export function useBookReader(_id: string | undefined) {
   };
 
   const toggleHighlight = (indices: number[], texts: string[]) => {
+    if (texts.join('').startsWith(IMAGE_MARKER)) return;
     setHighlights((prev) => {
       const exists = prev.find((b) => indices.every((i) => b.indices.includes(i)));
       if (exists) {
@@ -141,9 +154,7 @@ export function useBookReader(_id: string | undefined) {
     if (!_id) return;
 
     await api.books.deleteLine(_id, index);
-    setLines((prev) => prev.filter((_, i) => i !== index));
-    setTotalLines((prev) => prev - 1);
-    // flushUpdate();
+    setLines((prev) => prev.map((line, i) => (i === index ? DELETE_MARKER + line : line)));
   };
 
   const updateBook = async (_id: string, updates: Partial<Book>) => {
@@ -176,6 +187,7 @@ export function useBookReader(_id: string | undefined) {
         setTotalLines(book.totalLines);
         setCurrentLine(book.currentLine || 0);
         setlastCompleted(book.lastCompleted || '');
+        setChapters(book.chapters || []);
         setBookmarks(book.bookmarks || []);
         setHighlights(book.highlights || []);
 
@@ -202,6 +214,9 @@ export function useBookReader(_id: string | undefined) {
     currentLine,
     setCurrentLine,
     lastCompleted,
+    chapters,
+    setChapters,
+    toggleChapter,
     bookmarks,
     setBookmarks,
     toggleBookmark,
@@ -211,6 +226,7 @@ export function useBookReader(_id: string | undefined) {
     onBookCompleted,
 
     canFetch,
+    isFetchingRef,
 
     flushBook,
     hydrateChapterByIndex,

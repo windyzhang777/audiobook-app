@@ -270,13 +270,13 @@ export class BookController {
 
   deleteContent = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const lineIndex = parseInt(req.query.line as string);
+    const index = parseInt(req.query.line as string);
 
     try {
-      await this.bookService.deleteContent(id as string, lineIndex);
+      await this.bookService.deleteContent(id as string, index);
       res.status(204).send();
     } catch (error) {
-      const message = error instanceof Error ? error.message : `Error deleting line ${lineIndex} from book`;
+      const message = error instanceof Error ? error.message : `Error deleting line ${index} from book`;
       return res.status(400).json({ message });
     }
   };

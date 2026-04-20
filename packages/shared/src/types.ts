@@ -2,6 +2,14 @@ type BookSource = 'local' | 'web';
 
 export type BookFileType = 'txt' | 'epub' | 'pdf' | 'mobi' | 'web';
 
+export interface Chapter {
+  title: string;
+  source: string; // line index for upload; URL for scraper
+  isLoaded: boolean;
+  startIndex?: number;
+  href?: string;
+}
+
 export interface BookMark {
   index: number;
   text: string;
@@ -10,14 +18,6 @@ export interface BookMark {
 export interface HighLight {
   indices: number[];
   texts: string[];
-}
-
-export interface Chapter {
-  title: string;
-  source: string; // line index for upload; URL for scraper
-  isLoaded: boolean;
-  startIndex?: number;
-  href?: string;
 }
 
 /**
