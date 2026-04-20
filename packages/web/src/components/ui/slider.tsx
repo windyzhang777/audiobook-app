@@ -13,10 +13,9 @@ function Slider({ id, className, defaultValue, value, min = 0, max = 100, ...pro
   const { isPlaying, viewLine, jumpToRead } = useCommonContext();
 
   const [isVisible, setIsVisible] = useState(false);
-  const { currentLine, book } = useBookContext();
+  const { currentLine, chapters } = useBookContext();
   const [hoverPercentage, setHoverPercentage] = useState<number>();
 
-  const chapters = book?.chapters;
   const hoverLine = hoverPercentage !== undefined ? Math.round((hoverPercentage * max) / 100) : undefined;
   const currentPercentage = currentLine !== undefined ? (currentLine / max) * 100 : undefined;
   const currentChapter = currentLine ? getChapter(currentLine, chapters) : undefined;

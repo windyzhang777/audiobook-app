@@ -1,11 +1,37 @@
 import chardet from 'chardet';
 import fs from 'fs';
 import iconv from 'iconv-lite';
+import { CHAPTER_MARKER, DELETE_MARKER, IMAGE_MARKER } from './constants';
 import type { Book, BookFileType } from './types';
 
 // \p{L} matches any letter from any language
 // \p{N} matches any kind of numeric character
 export const hasAlphanumeric = /[\p{L}\p{N}]/u;
+
+export const escapeRegExp = (str: string) => {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+};
+
+export const hasMarker = (line: string) => {
+  if (line.startsWith(CHAPTER_MARKER) || line.startsWith(IMAGE_MARKER) || line.startsWith(DELETE_MARKER)) {
+    return true;
+  }
+  return false;
+};
+
+export const removeMarker = (line: string) => {
+  let cleanLine = line;
+  if (cleanLine.startsWith(DELETE_MARKER)) {
+    cleanLine = cleanLine.substring(DELETE_MARKER.length);
+  }
+  if (cleanLine.startsWith(CHAPTER_MARKER)) {
+    cleanLine = cleanLine.substring(CHAPTER_MARKER.length);
+  }
+  if (cleanLine.startsWith(IMAGE_MARKER)) {
+    cleanLine = cleanLine.substring(IMAGE_MARKER.length);
+  }
+  return cleanLine;
+};
 
 export const getFileTitle = (fileName: string) => {
   const parts = fileName.split('.');

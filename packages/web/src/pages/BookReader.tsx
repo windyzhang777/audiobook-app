@@ -42,6 +42,9 @@ export const BookReader = () => {
     currentLine,
     setCurrentLine,
     lastCompleted,
+    chapters,
+    setChapters,
+    toggleChapter,
     bookmarks,
     setBookmarks,
     toggleBookmark,
@@ -50,6 +53,7 @@ export const BookReader = () => {
     toggleHighlight,
     onBookCompleted,
     canFetch,
+    isFetchingRef,
     flushBook,
     hydrateChapterByIndex,
     loadMoreLines,
@@ -79,7 +83,7 @@ export const BookReader = () => {
     useBookNavigation(lines, loadMoreLines);
 
   // speech hook
-  const { isPlaying, play, pause, resume, stop } = useBookSpeech(_id, lines, lang, totalLines, selectedVoice, rate, currentLine, setCurrentLine, (index) => loadMoreLines(index), onBookCompleted);
+  const { isPlaying, play, pause, resume, stop } = useBookSpeech(_id, lines, lang, totalLines, selectedVoice, rate, currentLine, setCurrentLine, loadMoreLines, onBookCompleted);
 
   // search hook
   const { searchInputRef, searchText, setSearchText, searchRes, currentMatch, clickMatch, prevMatch, nextMatch, openSearch, closeSearch } = useBookSearch(
@@ -94,13 +98,12 @@ export const BookReader = () => {
   const [openPanelRight, setOpenPanelRight] = useState(readingMode === 'search' ? searchRes.length > 0 : true);
 
   const viewChapter = useMemo(() => {
-    const chapters = book?.chapters;
     if (!chapters) return undefined;
     const chapterIndex = getChapterIndex(viewLine, chapters);
     const chapter = chapters[chapterIndex];
     if (!chapter) return undefined;
     return { chapterIndex, ...chapter };
-  }, [viewLine, book?.chapters]);
+  }, [viewLine, chapters]);
 
   const loading = useMemo(() => !_id || loadingBook || loadingSetting, [_id, loadingBook, loadingSetting]);
 
@@ -131,7 +134,7 @@ export const BookReader = () => {
       startFrom = startFrom >= totalLines ? 0 : startFrom; // if at the end, reset to start from the first line
       startFromLine(startFrom);
 
-      startAnimationFrame(() => scrollToLine(startFrom, 'auto'));
+      startAnimationFrame(() => scrollToLine(startFrom));
       play(startFrom);
       shouldReadViewLineRef.current = false;
     }
@@ -159,7 +162,7 @@ export const BookReader = () => {
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const activeElement = document.activeElement;
-      console.log(`activeElement :`, activeElement);
+      // console.log(`activeElement :`, activeElement);
 
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -187,7 +190,7 @@ export const BookReader = () => {
 
     const moveToLine = (index: number) => {
       if (index == currentLine) return;
-      scrollToLine(index, 'auto');
+      scrollToLine(index);
       startFromLine(index);
       if (isPlaying) stop();
     };
@@ -216,7 +219,26 @@ export const BookReader = () => {
     <CommonContext.Provider
       value={{ viewLine, isPlaying, handlePlayPause, readingMode, jumpToIndex, jumpToRead: () => jumpToRead(currentLine), ttsScroll, userScroll, navigateBack, hydrateChapterByIndex, handleLineClick }}
     >
-      <BookContext.Provider value={{ _id, currentLine, totalLines, lastCompleted, bookmarks, setBookmarks, toggleBookmark, highlights, setHighlights, toggleHighlight, viewChapter, book, deleteLine }}>
+      <BookContext.Provider
+        value={{
+          _id,
+          currentLine,
+          totalLines,
+          lastCompleted,
+          chapters,
+          setChapters,
+          toggleChapter,
+          bookmarks,
+          setBookmarks,
+          toggleBookmark,
+          highlights,
+          setHighlights,
+          toggleHighlight,
+          viewChapter,
+          book,
+          deleteLine,
+        }}
+      >
         <ContentContext.Provider value={{ lines, lang, hasMore }}>
           <SearchContext.Provider value={{ searchInputRef, searchText, setSearchText, searchRes, currentMatch, clickMatch, prevMatch, nextMatch, openSearch, closeSearch }}>
             <SettingContext.Provider value={{ fontSize, setFontSize, rate, setRate, setVoice, selectedVoice, lineHeight, setLineHeight, indent, setIndent, alignment, setAlignment, availableVoices }}>
@@ -236,12 +258,12 @@ export const BookReader = () => {
                     initialTopMostItemIndex={{ index: 0, align: 'center' }}
                     increaseViewportBy={200}
                     endReached={(index) => {
-                      if (!canFetch || isSearchJumpingRef.current) return;
+                      if (!canFetch || isFetchingRef.current || isSearchJumpingRef.current) return;
                       if (index < lines.length - 1) return;
                       loadMoreLines(lines.length);
                     }}
                     atBottomStateChange={(atBottom) => {
-                      if (!canFetch || !atBottom) return;
+                      if (!canFetch || isFetchingRef.current || !atBottom) return;
                       loadMoreLines(lines.length);
                     }}
                     rangeChanged={(range) => {
@@ -253,14 +275,8 @@ export const BookReader = () => {
                           {...props}
                           ref={ref}
                           tabIndex={0}
-                          onWheel={() => {
-                            userScroll();
-                            setReadingMode('tts');
-                          }}
-                          onTouchMove={() => {
-                            userScroll();
-                            setReadingMode('tts');
-                          }}
+                          onWheel={userScroll}
+                          onTouchMove={userScroll}
                           className="top-20 outline-none list-none text-left mx-auto w-11/12 md:w-4/7"
                           style={{ ...style, fontSize, lineHeight, textAlign: alignment }}
                         >

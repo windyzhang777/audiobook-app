@@ -18,16 +18,13 @@ export default function useBookNavigation(lines: string[], loadMoreLines: (offse
   const isViewLineVisibleRef = useRef(false);
   const shouldReadViewLineRef = useRef(false);
 
-  const isUserScrollRef = useRef(true);
-  const scrollMoodRef = useRef<ScrollMode>('tts');
+  const isUserScrollRef = useRef(false);
 
   const userScroll = useCallback(() => {
-    scrollMoodRef.current = 'user';
     isUserScrollRef.current = true;
   }, []);
 
   const ttsScroll = useCallback(() => {
-    scrollMoodRef.current = 'tts';
     isUserScrollRef.current = false;
     focusBody();
   }, []);
@@ -70,7 +67,6 @@ export default function useBookNavigation(lines: string[], loadMoreLines: (offse
     isViewLineVisibleRef,
     shouldReadViewLineRef,
     isUserScrollRef,
-    scrollMoodRef,
     userScroll,
     ttsScroll,
     scrollToLine,

@@ -40,6 +40,7 @@ export const ONE_DAY = 24 * 60 * 60 * 1000;
 
 export const CHAPTER_MARKER = '[CHAPTER_MARKER]'; // Identify chapter titles in the lines array
 export const IMAGE_MARKER = '[IMAGE_MARKER]';
+export const DELETE_MARKER = '[DELETE_MARKER]';
 
 /**
  * Maps franc 3-letter ISO 639-3 code (e.g., 'cmn', 'eng') to 2-letter BCP 47 codes + region (e.g., 'en-US', 'zh-CN')

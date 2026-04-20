@@ -1,6 +1,6 @@
 import type { ScrapeProgress } from '@/common/useBookScrape';
 import { ChunkedUploader } from '@/services/ChunkedUploader';
-import { UPLOAD_CHUNK_SIZE, type Book, type BookContentPaginated, type BookSetting, type ChunkedUploadConfig } from '@audiobook/shared';
+import { UPLOAD_CHUNK_SIZE, type Book, type BookContentPaginated, type BookSetting, type ChunkedUploadConfig, type SearchMatch } from '@audiobook/shared';
 
 const getErrorMessage = async (response: Response, message?: string): Promise<string> => {
   try {
@@ -242,7 +242,7 @@ export const api = {
       return response.json();
     },
 
-    search: async (_id: string, query: string): Promise<{ count: number; indices: number[] }> => {
+    search: async (_id: string, query: string): Promise<{ count: number; matches: SearchMatch[] }> => {
       const response = await fetch(`/api/books/${_id}/search?q=${query}`);
 
       if (!response.ok) {
