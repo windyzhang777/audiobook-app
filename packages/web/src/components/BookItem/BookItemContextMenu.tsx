@@ -25,7 +25,7 @@ export const BookItemContextMenu = ({ book, canAction, openAction }: BookItemCon
                 e.stopPropagation();
               }
             }}
-            className="absolute bottom-1 right-0 w-5 h-5"
+            className="absolute bottom-3 right-2 w-5 h-5"
           >
             <Ellipsis />
           </Button>

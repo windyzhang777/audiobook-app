@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { type Book } from '@audiobook/shared';
 import { Trash2 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 interface BookItemModalProps {
   open: boolean;
@@ -14,6 +14,56 @@ interface BookItemModalProps {
   confirmText?: string;
   cancelText?: string;
 }
+
+interface ScrapeBookProps extends BookItemModalProps {
+  scrapeUrl: string;
+  setScrapeUrl: Dispatch<SetStateAction<string>>;
+  onConfirm: () => Promise<void>;
+}
+
+export const ScrapeBookModal = ({ open, onClose, title, scrapeUrl, setScrapeUrl, onConfirm }: ScrapeBookProps) => {
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={() => {
+        onClose();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="px-8 leading-relaxed text-center font-semibold">{title}</DialogTitle>
+        </DialogHeader>
+        <div className="flex gap-2 mb-6">
+          <Input
+            autoFocus
+            type="text"
+            placeholder="https://www.xpxs.net/book/<BOOK-ID>"
+            value={scrapeUrl}
+            onChange={(e) => setScrapeUrl(e.target.value)}
+            className="flex-1 px-4 py-2"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                onConfirm();
+              }
+            }}
+          />
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" type="button">
+              Close
+            </Button>
+          </DialogClose>
+          <DialogClose asChild>
+            <Button type="submit" disabled={!scrapeUrl.trim()} onClick={() => onConfirm()}>
+              Ok
+            </Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
 
 interface EditBookInfoProps extends BookItemModalProps {
   book: Book;
@@ -86,10 +136,12 @@ export const EditBookInfo = ({ open, onClose, title, onConfirm, book }: EditBook
         </div>
         <DialogFooter>
           <DialogClose asChild>
-            <Button type="button">Close</Button>
+            <Button variant="outline" type="button">
+              Close
+            </Button>
           </DialogClose>
           <DialogClose asChild>
-            <Button type="submit" onClick={() => onConfirm?.(book._id, updates, uploadingFile)}>
+            <Button type="submit" onClick={() => onConfirm(book._id, updates, uploadingFile)}>
               Ok
             </Button>
           </DialogClose>

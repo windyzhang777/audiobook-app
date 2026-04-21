@@ -1,7 +1,9 @@
+'use client';
+
 import { Slider as SliderPrimitive } from 'radix-ui';
 import * as React from 'react';
 
-import { useBookContext, useCommonContext } from '@/config/contexts';
+import { useBookContext, useCommonContext, useViewLineContext } from '@/config/contexts';
 import { cn } from '@/lib/utils';
 import { getChapter } from '@/utils';
 import { calculateProgress } from '@audiobook/shared';
@@ -10,7 +12,8 @@ import { useState } from 'react';
 function Slider({ id, className, defaultValue, value, min = 0, max = 100, ...props }: React.ComponentProps<typeof SliderPrimitive.Root>) {
   const _values = React.useMemo(() => (Array.isArray(value) ? value : Array.isArray(defaultValue) ? defaultValue : [min, max]), [value, defaultValue, min, max]);
 
-  const { isPlaying, viewLine, jumpToRead } = useCommonContext();
+  const { isPlaying, jumpToRead } = useCommonContext();
+  const { viewLine } = useViewLineContext();
 
   const [isVisible, setIsVisible] = useState(false);
   const { currentLine, chapters } = useBookContext();
@@ -47,22 +50,24 @@ function Slider({ id, className, defaultValue, value, min = 0, max = 100, ...pro
       onMouseMove={handleMouseMove}
       onMouseLeave={() => setHoverPercentage(undefined)}
       className={cn(
-        'relative flex w-full touch-none items-center select-none group data-disabled:opacity-50 data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col cursor-pointer',
+        'group relative flex w-full touch-none items-center select-none data-disabled:opacity-50 data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col cursor-pointer',
         className,
       )}
       {...props}
     >
-      <SliderPrimitive.Track data-slot="slider-track" className="relative grow overflow-hidden rounded-xs bg-muted data-horizontal:h-1.5 data-horizontal:w-full data-vertical:h-full data-vertical:w-1">
-        <SliderPrimitive.Range data-slot="slider-range" className="absolute bg-primary select-none data-horizontal:h-full data-vertical:w-full" />
+      <SliderPrimitive.Track data-slot="slider-track" className="relative grow overflow-hidden rounded-full bg-muted data-horizontal:h-1 data-horizontal:w-full data-vertical:h-full data-vertical:w-1">
+        <SliderPrimitive.Range
+          data-slot="slider-range"
+          style={{ left: 0, width: id === 'progress' ? `${currentPercentage}%` : '' }}
+          className="absolute bg-primary select-none data-horizontal:h-full data-vertical:w-full"
+        />
       </SliderPrimitive.Track>
 
       {/* Current Line */}
       {id === 'progress' && currentPercentage !== undefined && currentLine !== undefined && (
         <div className="absolute flex flex-col items-center cursor-pointer z-10" style={{ left: `${currentPercentage}%`, top: '50%', transform: 'translate(-50%, -50%)' }}>
           {/* View Thumb */}
-          {currentLine !== viewLine && (
-            <div id="jump-to-read" title="Jump To Read" onClick={jumpToRead} className="size-4 rounded-full border border-input bg-primary ring-ring/50 transition-[color,box-shadow] hover:ring-3" />
-          )}
+          <div id="jump-to-read" title="Jump To Read" onClick={jumpToRead} className="size-3 rounded-full bg-primary ring-ring/50 transition-[color,box-shadow] hover:ring-3" />
           {/* View Info */}
           <div
             className={`absolute bottom-full mb-2 bg-primary text-primary-foreground text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap pointer-events-none opacity-0 ${hoverPercentage === undefined && isVisible && !isPlaying ? 'group-hover:opacity-100' : ''} duration-100 transition-opacity`}
@@ -76,10 +81,10 @@ function Slider({ id, className, defaultValue, value, min = 0, max = 100, ...pro
       )}
 
       {/* Hover */}
-      {id === 'progress' && hoverPercentage !== undefined && hoverLine !== undefined && currentLine !== undefined && Math.abs(hoverLine - currentLine) > 100 && (
+      {id === 'progress' && hoverPercentage !== undefined && hoverLine !== undefined && currentLine !== undefined && (
         <div className="absolute flex flex-col items-center cursor-pointer z-10" style={{ left: `${hoverPercentage}%`, top: '50%', transform: 'translate(-50%, -50%)' }}>
           {/* Hover Thumb */}
-          <div className="size-4 rounded-full border border-input bg-white ring-ring/50 transition-[color,box-shadow] hover:ring-3" />
+          {Math.abs(hoverLine - currentLine) > 100 && <div className="size-3 rounded-full border border-ring bg-white ring-ring/50 transition-[color,box-shadow] hover:ring-3" />}
           {/* Hover Info */}
           <div className="absolute bottom-full mb-2 bg-primary text-primary-foreground text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap pointer-events-none">
             <div>
@@ -94,7 +99,10 @@ function Slider({ id, className, defaultValue, value, min = 0, max = 100, ...pro
         <SliderPrimitive.Thumb
           data-slot="slider-thumb"
           key={index}
-          className={`relative block size-4 shrink-0 rounded-full border border-input ${id === 'progress' && currentLine === viewLine ? 'bg-primary' : 'bg-white'} ring-ring/50 transition-[color,box-shadow] select-none after:absolute after:-inset-2 hover:ring-3 focus-visible:ring-3 focus-visible:outline-hidden active:ring-3 disabled:pointer-events-none disabled:opacity-50`}
+          className={cn(
+            'z-20 relative block size-3 shrink-0 rounded-full border border-ring bg-white ring-ring/50 transition-[color,box-shadow] select-none after:absolute after:-inset-2 hover:ring-3 focus-visible:ring-3 focus-visible:outline-hidden active:ring-3 disabled:pointer-events-none disabled:opacity-50',
+            id === 'progress' && Math.abs(currentLine - viewLine) < 10 ? 'bg-transparent border-transparent' : 'bg-white',
+          )}
         />
       ))}
     </SliderPrimitive.Root>

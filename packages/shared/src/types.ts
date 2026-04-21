@@ -144,6 +144,12 @@ export interface ChunkMetadata {
   retries: number;
 }
 
-export type BookAction = { type: 'select'; book: Book } | { type: 'edit'; book: Book } | { type: 'delete'; book: Book } | { type: 'resetProgress'; book: Book } | { type: 'markCompleted'; book: Book };
+export type BookAction =
+  | { type: 'select'; book: Book }
+  | { type: 'scrape'; book: Book }
+  | { type: 'edit'; book: Book }
+  | { type: 'delete'; book: Book }
+  | { type: 'resetProgress'; book: Book }
+  | { type: 'markCompleted'; book: Book };
 
 export type LineAction = { type: 'highlight'; book: Book } | { type: 'copy'; book: Book };

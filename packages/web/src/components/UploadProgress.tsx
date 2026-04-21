@@ -181,7 +181,7 @@ export function ScrapeProgress({ progress, error, stopScrape }: ScrapeProgressPr
               <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={20} />
               <p className="text-sm text-red-700">{error}</p>
             </div>
-            <Button variant="secondary" onClick={stopScrape}>
+            <Button variant="secondary" onClick={stopScrape} className="float-right">
               Close
             </Button>
           </div>

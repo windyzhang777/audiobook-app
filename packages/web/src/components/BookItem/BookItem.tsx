@@ -1,7 +1,7 @@
 import { BindingLine, BookItemContextMenu, BookItemPlaceholder } from '@/components/BookItem';
 import { Button } from '@/components/ui/button';
-import { calculateProgress, formatLocaleDateString, type Book, type BookAction } from '@audiobook/shared';
-import { BellRing } from 'lucide-react';
+import { bookTitleWithAuthor, calculateProgress, formatLocaleDateString, type Book, type BookAction } from '@audiobook/shared';
+import { BadgeCheck, BellRing, CircleChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface BookItemProps {
@@ -34,7 +34,8 @@ export const BookItem = ({ book, isSelected, selectBook, hasNewChapters, updateC
           navigate(`/book/${book._id}`);
         }
       }}
-      className={`relative aspect-3/5 w-40 rounded-md overflow-hidden pt-8 pb-10 px-2 ${isSelected ? 'bg-black/10' : ''} transition-all cursor-pointer group`}
+      title={bookTitleWithAuthor(book)}
+      className={`relative aspect-3/5 w-40 rounded-md overflow-hidden pt-8 pb-10 px-2 ${isSelected ? 'bg-muted-foreground/10' : ''} transition-all cursor-pointer group`}
     >
       <div className="relative w-full h-full overflow-hidden">
         {book.coverPath ? (
@@ -62,21 +63,35 @@ export const BookItem = ({ book, isSelected, selectBook, hasNewChapters, updateC
             e.stopPropagation();
             updateChapters();
           }}
-          className="absolute top-9.5 left-3.5 p-1.5! rounded-full! shake-active bg-white text-amber-600"
+          className="absolute top-9.5 left-3.5 h-7 w-7 rounded-full! shake-active bg-white text-amber-600"
         >
-          <BellRing size={14} />
+          <BellRing />
         </Button>
       ) : null}
 
       {/* Badge / Progress Indicator */}
       {book.lastCompleted ? (
-        <span className="absolute bottom-3.5 left-2 text-[10px] text-black/50">Last Read: {formatLocaleDateString(new Date(book.lastReadAt || book.updatedAt))}</span>
+        <span className="absolute bottom-3.5 left-2 w-[75%] text-[10px] text-muted-foreground flex items-center gap-1 text-left pointer-events-none">
+          <BadgeCheck strokeWidth={1} className="w-3.5 h-3.5 fill-primary stroke-background" />
+          <span>{formatLocaleDateString(new Date(book.lastReadAt || book.updatedAt))}</span>
+        </span>
       ) : book.currentLine === 0 ? (
-        <span className="absolute bottom-3 left-2 text-[10px] px-1.5 py-0.5 flex items-center rounded-full bg-blue-900 backdrop-blur-sm pointer-events-none text-white font-semibold uppercase tracking-tighter">
-          NEW
+        <span className="absolute bottom-3 left-2 w-[75%] text-[10px] flex items-center gap-1 text-left pointer-events-none">
+          <CircleChevronRight strokeWidth={1} className="w-4 h-4 fill-green-600 stroke-background" />
+          <span className="w-full truncate justify-start">{book.title}</span>
         </span>
       ) : (
-        <span className="absolute bottom-3.5 left-2 text-[10px] text-muted-foreground">{progress}%</span>
+        <span className="absolute bottom-3.5 left-2 w-[75%] text-[10px] flex items-center gap-1 text-left pointer-events-none">
+          <span
+            className="flex items-center justify-center rounded-md border text-muted-foreground shrink-0 h-4 px-1 text-[8px] font-medium"
+            style={{
+              background: `linear-gradient(to right, var(--muted) ${progress}%, transparent ${progress}%)`,
+            }}
+          >
+            {progress}%
+          </span>
+          <span className="w-full truncate justify-start">{book.title}</span>
+        </span>
       )}
 
       {/* Ellipsis */}

@@ -297,7 +297,7 @@ export const BookReader = () => {
                           tabIndex={0}
                           onWheel={userScroll}
                           onTouchMove={userScroll}
-                          className="top-20 outline-none list-none text-left mx-auto w-11/12 md:w-4/7"
+                          className="top-20 outline-none list-none text-left mx-auto w-11/12 md:w-5/8"
                           style={{ ...style, fontSize, lineHeight, textAlign: alignment, paddingLeft: indent + 'ch', paddingRight: indent + 'ch' }}
                         >
                           {children}

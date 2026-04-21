@@ -20,7 +20,7 @@ export const BookHeader = ({ setOpenPanelLeft, setOpenPanelRight }: BookHeaderPr
 
   return (
     <header className="fixed z-10 top-0 left-0 right-0">
-      <nav id="controls" className="relative px-4 pt-0 pb-10 md:pt-4 md:pb-4 [&_button:not([name='clear search'])]:pt-2! md:[&_button]:pt-4!">
+      <nav id="controls" className="relative px-4 pt-0 pb-10 md:py-4">
         {/* Left Panel Group */}
         <div id="panel-left" title="Bookmars & Chapters" className="flex items-center gap-2">
           {/* Left Panel */}
@@ -99,7 +99,7 @@ export const BookHeader = ({ setOpenPanelLeft, setOpenPanelRight }: BookHeaderPr
         </div>
 
         {/* Back to Books */}
-        <div className="absolute top-0 left-1/2 md:left-72 -translate-x-1/2 h-7.5 md:h-14 duration-200 transition-opacity">
+        <div className="absolute top-0 left-1/2 md:left-72 -translate-x-1/2 h-7 md:h-13 duration-200 transition-opacity">
           <Button
             size="icon"
             variant="ghost"
@@ -138,12 +138,11 @@ export const BookHeader = ({ setOpenPanelLeft, setOpenPanelRight }: BookHeaderPr
                 openSearch();
               }
             }}
-            className={`shrink-0 ${readingMode === 'search' ? 'text-gray-600' : 'text-inherit'}`}
           >
             <Search />
           </Button>
           {readingMode === 'search' && (
-            <div className={`mt-0.5 h-6 md:mt-0 md:h-auto flex items-center no-wrap overflow-hidden rounded-lg duration-200 ${readingMode === 'search' ? 'bg-highlight' : 'bg-inherit'}`}>
+            <div className={`mt-0.5 h-6 md:h-auto flex items-center no-wrap overflow-hidden rounded-lg duration-200 ${readingMode === 'search' ? 'bg-highlight' : 'bg-inherit'}`}>
               <Input
                 autoFocus
                 id="search-text"

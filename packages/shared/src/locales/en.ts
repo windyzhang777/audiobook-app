@@ -1,6 +1,10 @@
 export const en = {
   book: {
     actions: {
+      scrape: {
+        menuLabel: '',
+        modalTitle: 'Web Book',
+      },
       edit: {
         menuLabel: 'Rename...',
         modalTitle: 'Book Info',

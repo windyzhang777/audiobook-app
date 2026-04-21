@@ -5,13 +5,13 @@ import { useBookUpload } from '@/common/useBookUpload';
 import { useScrapeUpdates } from '@/common/useScrapeUpdates';
 import { Button } from '@/components//ui/button';
 import { BookItem, ConfirmModal, EditBookInfo } from '@/components/BookItem';
+import { ScrapeBookModal } from '@/components/BookItem/BookItemModal';
 import { useTheme } from '@/components/theme-provider';
 import { ButtonGroup } from '@/components/ui/button-group';
-import { Input } from '@/components/ui/input';
 import { ScrapeProgress, UploadProgress } from '@/components/UploadProgress';
 import { FEATURES } from '@/config/features';
 import { getBookActionLabel, type Book } from '@audiobook/shared';
-import { BookOpen, LinkIcon, Loader, Loader2, Moon, Sun, Upload } from 'lucide-react';
+import { BookOpen, CirclePlus, Cloudy, Loader, Moon, Sun } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -20,7 +20,6 @@ export const BookList = () => {
 
   const [showFinished, setShowFinished] = useState(true);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
-  const [showUrlInput, setShowUrlInput] = useState(false);
 
   // theme hook
   const { theme, setTheme } = useTheme();
@@ -44,7 +43,7 @@ export const BookList = () => {
     startScrape,
     stopScrape,
   } = useBookScrape(
-    () => setShowUrlInput(false),
+    () => closeAction(),
     () => loadBooks(),
   );
 
@@ -81,14 +80,13 @@ export const BookList = () => {
       if (e.key === 'Escape') {
         e.preventDefault();
         closeAction();
-        setShowUrlInput(false);
         setSelectedBook(null);
       }
     };
 
-    window.addEventListener('keydown', handleGlobalKeyDown);
+    if (pendingAction) window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [closeAction]);
+  }, [pendingAction, closeAction]);
 
   if (loading) {
     return (
@@ -99,32 +97,37 @@ export const BookList = () => {
   }
 
   return (
-    <div className="min-h-full max-w-md md:max-w-2xl lg:max-w-4xl mx-auto pt-8 pb-30 px-6 flex flex-col">
-      {/* Header */}
+    <div className="min-h-full max-w-md md:max-w-2xl lg:max-w-4xl mx-auto pt-8 pb-30 px-6 flex flex-col text-sm">
+      {/* Theme Settings */}
       <header className="text-center mb-4 flex justify-between items-center ">
-        <h3 className="font-semibold opacity-0">My Books</h3>
-        <ButtonGroup className="gap-2">
-          <Button size="icon" variant={theme === 'light' ? 'default' : 'outline'} onClick={() => setTheme('light')} className="grow border! border-sidebar-accent!">
+        <div className="grow" />
+        <ButtonGroup>
+          <Button size="icon" variant={theme === 'light' ? 'default' : 'outline'} onClick={() => setTheme('light')}>
             <Sun strokeWidth={1.5} className="w-5! h-5!" />
           </Button>
-          <Button size="icon" variant={theme === 'dark' ? 'default' : 'outline'} onClick={() => setTheme('dark')} className="grow border! border-sidebar-accent!">
+          <Button size="icon" variant={theme === 'dark' ? 'default' : 'outline'} onClick={() => setTheme('dark')}>
             <Moon strokeWidth={1.5} className="w-5! h-5!" />
           </Button>
         </ButtonGroup>
       </header>
 
       {/* File Upload & Scrape Controls */}
-      <div className="flex flex-col gap-3 mb-6 text-sm">
-        {/* Button group */}
-        <div className="flex flex-wrap grow gap-2 justify-center md:justify-start">
+      <div className="flex justify-between items-center mb-4">
+        {/* Header */}
+        <h3 className="font-semibold pl-2.5">Books</h3>
+
+        <div className="grow" />
+
+        {/* Upload & Scrape */}
+        <div className="flex flex-wrap gap-2 justify-center md:justify-start items-center">
           {/* Upload button */}
           <label
             htmlFor="file-upload"
-            title="Upload a book from local (txt, epub)"
-            className="grow flex justify-center items-center gap-2 px-4 py-1 bg-primary text-primary-foreground hover:bg-primary/80 rounded-sm whitespace-nowrap cursor-pointer transition-colors focus-visible:border-none focus-visible:ring-2 focus-visible:ring-amber-400"
+            title="Upload a book from local (txt, pde, epub)"
+            className="grow flex justify-center items-center gap-1 bg-transparent py-1.5 px-2.5 hover:bg-muted rounded-sm whitespace-nowrap cursor-pointer transition-colors"
           >
-            <Upload size={16} />
-            <span className="hidden sm:inline font-medium">Upload a book from local (txt, epub)</span>
+            <CirclePlus size={16} />
+            <span className="hidden sm:inline font-medium">Upload</span>
             <input
               id="file-upload"
               aria-label="file-upload"
@@ -133,46 +136,19 @@ export const BookList = () => {
               tabIndex={0}
               disabled={loading || isScraping}
               onChange={startUpload}
-              onClick={() => {
-                if (showUrlInput) setShowUrlInput(false);
-              }}
+              onClick={closeAction}
               className="sr-only"
             />
           </label>
 
           {/* Scrape button */}
           {FEATURES.ENABLE_BOOK_SCRAPE && (
-            <Button
-              variant="secondary"
-              title="Scrape a book from web"
-              onClick={() => setShowUrlInput((prev) => !prev)}
-              className="grow flex justify-center items-center gap-2 px-4 py-3 border-2 rounded-xl transition-all"
-            >
-              <LinkIcon size={18} />
-              <span className="hidden sm:inline font-medium">Scrape a book from web</span>
+            <Button variant="ghost" title="Scrape a book from web" onClick={() => openAction('scrape', books[0])}>
+              <Cloudy />
+              <span className="hidden sm:inline font-medium">Web</span>
             </Button>
           )}
         </div>
-
-        {/* URL Input Field (Collapsible) */}
-        {showUrlInput && (
-          <div className="flex gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
-            <Input
-              autoFocus
-              type="text"
-              placeholder="https://www.xpxs.net/book/<BOOK-ID>"
-              value={scrapeUrl}
-              onChange={(e) => setScrapeUrl(e.target.value)}
-              className="flex-1 px-4 py-2"
-              disabled={isScraping}
-              onKeyDown={(e) => e.key === 'Enter' && startScrape()}
-            />
-            <Button title="Start scraping" onClick={startScrape} disabled={isScraping || !scrapeUrl.trim()} className="px-6 py-2 flex items-center gap-2">
-              {isScraping ? <Loader2 size={16} className="animate-spin" /> : <LinkIcon size={18} />}
-              <span className="hidden sm:inline">Start scraping</span>
-            </Button>
-          </div>
-        )}
       </div>
 
       {/* No Books */}
@@ -247,6 +223,18 @@ export const BookList = () => {
       {scrapeProgress ? <ScrapeProgress progress={scrapeProgress} error={errorScrape} stopScrape={stopScrape} /> : null}
 
       {/* Book Item Modal */}
+      {/* Web Book Modal */}
+      {!!pendingAction && (
+        <ScrapeBookModal
+          open={pendingAction.type === 'scrape' && !isScraping}
+          onClose={closeAction}
+          title={getBookActionLabel(pendingAction.type, t, 'modalTitle')}
+          scrapeUrl={scrapeUrl}
+          setScrapeUrl={setScrapeUrl}
+          onConfirm={startScrape}
+        />
+      )}
+
       {!!pendingAction && (
         <EditBookInfo open={pendingAction?.type === 'edit'} onClose={closeAction} title={getBookActionLabel(pendingAction.type, t, 'modalTitle')} onConfirm={updateBook} book={pendingAction.book} />
       )}

@@ -3,6 +3,7 @@ import { BookAction } from './types';
 
 export const actionKeyByActionType: Record<BookAction['type'], string> = {
   select: 'book.actions.select',
+  scrape: 'book.actions.scrape',
   edit: 'book.actions.edit',
   delete: 'book.actions.delete',
   resetProgress: 'book.actions.resetProgress',
