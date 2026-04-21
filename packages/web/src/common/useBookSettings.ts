@@ -1,6 +1,16 @@
 import { api } from '@/services/api';
 import { speechService } from '@/services/SpeechService';
-import { ALIGNMENT_DEFAULT, FONT_SIZE_DEFAULT, INDENT_DEFAULT, LINE_HEIGHT_DEFAULT, RATE_DEFAULT, type BookSetting, type SpeechOptions, type VoiceType } from '@audiobook/shared';
+import {
+  ALIGNMENT_DEFAULT,
+  FONT_SIZE_DEFAULT,
+  INDENT_DEFAULT,
+  LINE_HEIGHT_DEFAULT,
+  PARAGRAPH_SPACING_DEFAULT,
+  RATE_DEFAULT,
+  type BookSetting,
+  type SpeechOptions,
+  type VoiceType,
+} from '@audiobook/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { useBookUpdate } from './useBookUpdate';
 
@@ -19,6 +29,7 @@ export function useReaderSettings(_id: string | undefined, lang: string | undefi
   const [fontSize, setFontSize] = useState<NonNullable<BookSetting['fontSize']>>();
   const [rate, setRate] = useState<NonNullable<BookSetting['rate']>>();
   const [lineHeight, setLineHeight] = useState<NonNullable<BookSetting['lineHeight']>>();
+  const [paragraphSpacing, setParagraphSpacing] = useState<NonNullable<BookSetting['paragraphSpacing']>>();
   const [indent, setIndent] = useState<NonNullable<BookSetting['indent']>>();
   const [alignment, setAlignment] = useState<NonNullable<BookSetting['alignment']>>();
   const [voice, setVoice] = useState<VoiceOption['id']>(VOICE_FALLBACK.id);
@@ -36,12 +47,23 @@ export function useReaderSettings(_id: string | undefined, lang: string | undefi
     return availableVoices.find((v) => v.id === voice) || availableVoices[0];
   }, [availableVoices, voice]);
 
-  const updates: Partial<BookSetting> = useMemo(() => ({ fontSize, rate, voice: selectedVoice.id, lineHeight, indent, alignment }), [alignment, fontSize, indent, lineHeight, rate, selectedVoice.id]);
+  const updates: Partial<BookSetting> = useMemo(
+    () => ({ fontSize, rate, voice: selectedVoice.id, lineHeight, paragraphSpacing, indent, alignment }),
+    [alignment, fontSize, lineHeight, paragraphSpacing, indent, rate, selectedVoice.id],
+  );
 
   const canUpdate =
     !loading &&
     JSON.stringify(updates) !==
-      JSON.stringify({ fontSize: setting?.fontSize, rate: setting?.rate, voice: setting?.voice, lineHeight: setting?.lineHeight, indent: setting?.indent, alignment: setting?.alignment });
+      JSON.stringify({
+        fontSize: setting?.fontSize,
+        rate: setting?.rate,
+        voice: setting?.voice,
+        lineHeight: setting?.lineHeight,
+        paragraphSpacing: setting?.paragraphSpacing,
+        indent: setting?.indent,
+        alignment: setting?.alignment,
+      });
 
   const updateBookSetting = async (_id: string, updates: Partial<BookSetting>) => {
     if (!_id) return;
@@ -68,6 +90,7 @@ export function useReaderSettings(_id: string | undefined, lang: string | undefi
         setRate(() => setting.rate || RATE_DEFAULT);
         setFontSize(() => setting.fontSize || FONT_SIZE_DEFAULT);
         setLineHeight(() => setting.lineHeight || LINE_HEIGHT_DEFAULT);
+        setParagraphSpacing(() => setting.paragraphSpacing || PARAGRAPH_SPACING_DEFAULT);
         setIndent(() => setting.indent || INDENT_DEFAULT);
         setAlignment(() => setting.alignment || ALIGNMENT_DEFAULT);
       } catch (error) {
@@ -90,6 +113,8 @@ export function useReaderSettings(_id: string | undefined, lang: string | undefi
     selectedVoice,
     lineHeight,
     setLineHeight,
+    paragraphSpacing,
+    setParagraphSpacing,
     indent,
     setIndent,
     alignment,

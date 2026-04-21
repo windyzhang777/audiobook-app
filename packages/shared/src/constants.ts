@@ -18,6 +18,11 @@ export const MIN_LINE_HEIGHT = 1;
 export const MAX_LINE_HEIGHT = 4;
 export const LINE_HEIGHT_STEP = 0.05;
 
+export const PARAGRAPH_SPACING_DEFAULT = 2;
+export const MIN_PARAGRAPH_SPACING = -0.5;
+export const MAX_PARAGRAPH_SPACING = 4;
+export const PARAGRAPH_SPACING_STEP = 0.05;
+
 export const INDENT_DEFAULT = 1;
 export const MIN_INDENT = 0;
 export const MAX_INDENT = 20;

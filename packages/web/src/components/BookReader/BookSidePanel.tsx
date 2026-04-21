@@ -21,11 +21,15 @@ import {
   MAX_FONT_SIZE,
   MAX_INDENT,
   MAX_LINE_HEIGHT,
+  MAX_PARAGRAPH_SPACING,
   MAX_RATE,
   MIN_FONT_SIZE,
   MIN_INDENT,
   MIN_LINE_HEIGHT,
+  MIN_PARAGRAPH_SPACING,
   MIN_RATE,
+  PARAGRAPH_SPACING_DEFAULT,
+  PARAGRAPH_SPACING_STEP,
   RATE_DEFAULT,
   RATE_STEP,
   removeMarker,
@@ -51,6 +55,8 @@ import {
   Moon,
   Plus,
   Rewind,
+  Rows2,
+  Rows4,
   Save,
   SquareArrowDown,
   SquareArrowUp,
@@ -321,7 +327,23 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
   const { toggleChapter, deleteLine } = useBookContext();
   const { lines } = useContentContext();
   const { viewLine, readingMode } = useCommonContext();
-  const { fontSize, setFontSize, rate, setRate, setVoice, selectedVoice, lineHeight, setLineHeight, indent, setIndent, alignment, setAlignment, availableVoices } = useSettingContext();
+  const {
+    fontSize,
+    setFontSize,
+    rate,
+    setRate,
+    setVoice,
+    selectedVoice,
+    lineHeight,
+    setLineHeight,
+    paragraphSpacing,
+    setParagraphSpacing,
+    indent,
+    setIndent,
+    alignment,
+    setAlignment,
+    availableVoices,
+  } = useSettingContext();
   const { isPlaying, resume } = useSpeechContext();
   const { searchRes, currentMatch, clickMatch, prevMatch, nextMatch, closeSearch } = useSearchContext();
 
@@ -540,6 +562,39 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
             />
           </div>
 
+          {/* Paragraph Spacing */}
+          <div className="flex flex-col gap-2">
+            <div className="uppercase text-xs">paragraph spacing</div>
+            <ButtonGroup className="flex-wrap row w-full gap-2">
+              <Button
+                size="icon"
+                variant="outline"
+                disabled={paragraphSpacing! <= MIN_PARAGRAPH_SPACING}
+                onClick={() => setParagraphSpacing((prev) => Math.max(MIN_PARAGRAPH_SPACING, prev! - PARAGRAPH_SPACING_STEP))}
+                className="grow border! border-sidebar-accent!"
+              >
+                <Rows4 strokeWidth={1.5} className="w-5! h-5!" />
+              </Button>
+              <Button
+                size="icon"
+                variant="outline"
+                disabled={paragraphSpacing! >= MAX_PARAGRAPH_SPACING}
+                onClick={() => setParagraphSpacing((prev) => Math.min(MAX_PARAGRAPH_SPACING, prev! + PARAGRAPH_SPACING_STEP))}
+                className="grow border! border-sidebar-accent!"
+              >
+                <Rows2 strokeWidth={1.5} className="w-5! h-5!" />
+              </Button>
+            </ButtonGroup>
+            <Slider
+              value={[paragraphSpacing || PARAGRAPH_SPACING_DEFAULT]}
+              onValueChange={async (indexes: number[]) => setParagraphSpacing(indexes[0])}
+              min={MIN_PARAGRAPH_SPACING}
+              max={MAX_PARAGRAPH_SPACING}
+              step={PARAGRAPH_SPACING_STEP}
+              className="mt-2"
+            />
+          </div>
+
           {/* Indent */}
           <div className="flex flex-col gap-2">
             <div className="uppercase text-xs">indent</div>
@@ -548,7 +603,7 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
                 size="icon"
                 variant="outline"
                 disabled={indent! <= MIN_INDENT}
-                onClick={() => setIndent((prev) => Math.max(0, prev! - INDENT_STEP))}
+                onClick={() => setIndent((prev) => Math.max(MIN_INDENT, prev! - INDENT_STEP))}
                 className="grow border! border-sidebar-accent!"
               >
                 <ListIndentDecrease strokeWidth={1.5} className="w-5! h-5!" />
@@ -563,7 +618,7 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
                 <ListIndentIncrease strokeWidth={1.5} className="w-5! h-5!" />
               </Button>
             </ButtonGroup>
-            <Slider value={[indent || INDENT_DEFAULT]} onValueChange={async (indexes: number[]) => setIndent(indexes[0])} min={MIN_INDENT} max={MAX_INDENT} step={INDENT_STEP} className="mt-2" />
+            <Slider value={[indent ?? INDENT_DEFAULT]} onValueChange={async (indexes: number[]) => setIndent(indexes[0])} min={MIN_INDENT} max={MAX_INDENT} step={INDENT_STEP} className="mt-2" />
           </div>
 
           {/* Alignment */}

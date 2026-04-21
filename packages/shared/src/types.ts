@@ -90,6 +90,7 @@ export interface SpeechOptions {
 export interface TextOptions {
   fontSize?: number;
   lineHeight?: number;
+  paragraphSpacing?: number;
   indent?: number;
   alignment?: Alignment;
 }

@@ -145,6 +145,7 @@ interface ISettingContext extends Omit<BookSetting, 'bookId' | 'audioPath' | 'pi
   setVoice: Dispatch<SetStateAction<NonNullable<string>>>;
   setFontSize: Dispatch<SetStateAction<BookSetting['fontSize']>>;
   setLineHeight: Dispatch<SetStateAction<BookSetting['lineHeight']>>;
+  setParagraphSpacing: Dispatch<SetStateAction<BookSetting['paragraphSpacing']>>;
   setIndent: Dispatch<SetStateAction<BookSetting['indent']>>;
   setAlignment: Dispatch<SetStateAction<BookSetting['alignment']>>;
   availableVoices: VoiceOption[];
@@ -158,6 +159,8 @@ const defaultSettingContext: ISettingContext = {
   setFontSize: () => {},
   lineHeight: 1,
   setLineHeight: () => {},
+  paragraphSpacing: 1,
+  setParagraphSpacing: () => {},
   indent: 1,
   setIndent: () => {},
   alignment: 'left',
@@ -180,6 +183,8 @@ export const useSettingContext = () => {
     setFontSize: settingContext.setFontSize,
     lineHeight: settingContext.lineHeight,
     setLineHeight: settingContext.setLineHeight,
+    paragraphSpacing: settingContext.paragraphSpacing,
+    setParagraphSpacing: settingContext.setParagraphSpacing,
     indent: settingContext.indent,
     setIndent: settingContext.setIndent,
     alignment: settingContext.alignment,

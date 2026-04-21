@@ -1,4 +1,4 @@
-import { useBookContext, useCommonContext, useSearchContext } from '@/config/contexts';
+import { useBookContext, useCommonContext, useSearchContext, useSettingContext } from '@/config/contexts';
 import { cn } from '@/lib/utils';
 import { CHAPTER_MARKER, DELETE_MARKER, escapeRegExp, IMAGE_MARKER, removeMarker } from '@audiobook/shared';
 import React from 'react';
@@ -19,6 +19,8 @@ export const BookLine = ({ index, line }: BookLineProps) => {
   const cleanLine = isChapter ? removeMarker(line) : line;
   const isImage = line.startsWith(IMAGE_MARKER);
   const isDeleted = line.startsWith(DELETE_MARKER);
+
+  const { paragraphSpacing } = useSettingContext();
 
   const getHighlightedText = (text: string, highlight: string, isHightlight: boolean = false) => {
     if (!highlight?.trim()) return text;
@@ -55,11 +57,12 @@ export const BookLine = ({ index, line }: BookLineProps) => {
       onDoubleClick={() => {
         handleLineClick(index);
       }}
+      style={{ paddingTop: paragraphSpacing + 'ch', paddingBottom: paragraphSpacing + 'ch' }}
       className={cn(
-        `group relative cursor-pointer my-1 px-2 transition-colors duration-200 ease-in-out rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-opacity-50`,
+        `group relative cursor-pointer my-1 px-2 transition-colors duration-200 ease-in-out rounded-lg`,
         index === currentLine ? 'bg-highlight font-medium' : index === viewLine ? 'bg-sidebar-accent' : 'hover:bg-sidebar-accent',
         isChapter ? 'font-semibold italic text-center uppercase tracking-widest' : '',
-        isBookmarked ? 'border border-r-4 border-amber-400 pr-2' : 'border-r-4 border-transparent',
+        isBookmarked ? 'border border-r-4 border-primary pr-2' : 'border-r-4 border-transparent',
       )}
     >
       {searchText && readingMode === 'search' ? getHighlightedText(cleanLine, searchText) : getHighlightedText(cleanLine, highlightTexts[0], true)}

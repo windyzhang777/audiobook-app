@@ -53,6 +53,7 @@ const BookSettingSchema = new Schema<IBookSetting>(
     voice: String,
     fontSize: Number,
     lineHeight: Number,
+    paragraphSpacing: Number,
     indent: Number,
     alignment: String,
     audioPath: String,

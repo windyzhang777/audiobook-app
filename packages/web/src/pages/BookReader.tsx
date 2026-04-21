@@ -70,6 +70,8 @@ export const BookReader = () => {
     selectedVoice,
     lineHeight,
     setLineHeight,
+    paragraphSpacing,
+    setParagraphSpacing,
     indent,
     setIndent,
     alignment,
@@ -241,7 +243,25 @@ export const BookReader = () => {
       >
         <ContentContext.Provider value={{ lines, lang, hasMore }}>
           <SearchContext.Provider value={{ searchInputRef, searchText, setSearchText, searchRes, currentMatch, clickMatch, prevMatch, nextMatch, openSearch, closeSearch }}>
-            <SettingContext.Provider value={{ fontSize, setFontSize, rate, setRate, setVoice, selectedVoice, lineHeight, setLineHeight, indent, setIndent, alignment, setAlignment, availableVoices }}>
+            <SettingContext.Provider
+              value={{
+                fontSize,
+                setFontSize,
+                rate,
+                setRate,
+                setVoice,
+                selectedVoice,
+                lineHeight,
+                setLineHeight,
+                paragraphSpacing,
+                setParagraphSpacing,
+                indent,
+                setIndent,
+                alignment,
+                setAlignment,
+                availableVoices,
+              }}
+            >
               <SpeechContext.Provider value={{ isPlaying, play, pause, resume: () => resume(currentLine), stop }}>
                 <div className="min-h-full relative overflow-hidden">
                   <BookHeader setOpenPanelLeft={setOpenPanelLeft} setOpenPanelRight={setOpenPanelRight} />
@@ -278,7 +298,7 @@ export const BookReader = () => {
                           onWheel={userScroll}
                           onTouchMove={userScroll}
                           className="top-20 outline-none list-none text-left mx-auto w-11/12 md:w-4/7"
-                          style={{ ...style, fontSize, lineHeight, textAlign: alignment }}
+                          style={{ ...style, fontSize, lineHeight, textAlign: alignment, paddingLeft: indent + 'ch', paddingRight: indent + 'ch' }}
                         >
                           {children}
                         </div>
