@@ -1,7 +1,7 @@
 import { Book, fixEncoding, PAGE_SIZE } from '@audiobook/shared';
 import { Request, Response } from 'express';
 import path from 'path';
-import { AudiobookService } from '../services/AudiobookService';
+import { AudiobookService } from '../services/audiobookService';
 import { BookService } from '../services/bookService';
 
 export class BookController {
@@ -268,15 +268,28 @@ export class BookController {
     }
   };
 
-  deleteContent = async (req: Request, res: Response) => {
+  deleteLine = async (req: Request, res: Response) => {
     const { id } = req.params;
     const index = parseInt(req.query.line as string);
 
     try {
-      await this.bookService.deleteContent(id as string, index);
+      await this.bookService.deleteLine(id as string, index);
       res.status(204).send();
     } catch (error) {
       const message = error instanceof Error ? error.message : `Error deleting line ${index} from book`;
+      return res.status(400).json({ message });
+    }
+  };
+
+  restoreLine = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const index = parseInt(req.query.line as string);
+
+    try {
+      const line = await this.bookService.restoreLine(id as string, index);
+      res.json({ line });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Error restoring line ${index} from book`;
       return res.status(400).json({ message });
     }
   };

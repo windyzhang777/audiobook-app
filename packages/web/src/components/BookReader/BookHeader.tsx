@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
-import { useBookContext, useCommonContext, useSearchContext } from '@/config/contexts';
+import { useBookContext, useCommonContext, useSearchContext, useViewLineContext } from '@/config/contexts';
 import { FEATURES } from '@/config/features';
 import { bookTitleWithAuthor } from '@audiobook/shared';
 import { ArrowBigDown, ArrowBigUp, LibraryBig, ListEnd, ListStart, MapPin, PanelLeft, Pause, Play, Search, Settings, X } from 'lucide-react';
@@ -10,11 +10,13 @@ import { type SetStateAction } from 'react';
 interface BookHeaderProps {
   setOpenPanelLeft: (value: SetStateAction<boolean>) => void;
   setOpenPanelRight: (value: SetStateAction<boolean>) => void;
+  toaster: React.ReactNode;
 }
 
-export const BookHeader = ({ setOpenPanelLeft, setOpenPanelRight }: BookHeaderProps) => {
+export const BookHeader = ({ setOpenPanelLeft, setOpenPanelRight, toaster }: BookHeaderProps) => {
   const { book, currentLine, chapters, viewChapter, totalLines } = useBookContext();
-  const { viewLine, isPlaying, handlePlayPause, readingMode, jumpToIndex, userScroll, jumpToRead, navigateBack } = useCommonContext();
+  const { isPlaying, handlePlayPause, readingMode, jumpToIndex, userScroll, jumpToRead, navigateBack } = useCommonContext();
+  const { viewLine } = useViewLineContext();
   const { searchInputRef, searchText, setSearchText, openSearch, closeSearch, prevMatch, nextMatch } = useSearchContext();
   if (!book || currentLine === undefined) return null;
 
@@ -124,6 +126,9 @@ export const BookHeader = ({ setOpenPanelLeft, setOpenPanelRight }: BookHeaderPr
 
         {/* Right Panel Group */}
         <div id="panel-right" title="Font & Voice" className="flex items-center gap-4">
+          {/* Restore delete */}
+          {toaster}
+
           {/* Search text */}
           <Button
             size="icon"
@@ -207,8 +212,8 @@ export const BookHeader = ({ setOpenPanelLeft, setOpenPanelRight }: BookHeaderPr
       <Slider
         id="progress"
         value={[viewLine]}
-        onValueChange={async (indexes: number[]) => {
-          const viewIndex = indexes[0];
+        onValueChange={async (indices: number[]) => {
+          const viewIndex = indices[0];
           await jumpToIndex(viewIndex);
         }}
         max={totalLines}

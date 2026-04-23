@@ -13,18 +13,25 @@ export default function useBookNavigation(lines: string[], loadMoreLines: (offse
   const { startTimer } = useTimer();
   const { startAnimationFrame } = useAnimationFrame();
 
+  const viewLineRef = useRef(viewLine);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const isSearchJumpingRef = useRef(false);
-  const isViewLineVisibleRef = useRef(false);
   const shouldReadViewLineRef = useRef(false);
 
   const isUserScrollRef = useRef(false);
 
+  const updateViewLine = useCallback((index: number) => {
+    viewLineRef.current = index;
+    setViewLine(index);
+  }, []);
+
   const userScroll = useCallback(() => {
+    console.log(`userScroll`);
     isUserScrollRef.current = true;
   }, []);
 
   const ttsScroll = useCallback(() => {
+    console.log(`ttsScroll`);
     isUserScrollRef.current = false;
     focusBody();
   }, []);
@@ -40,7 +47,7 @@ export default function useBookNavigation(lines: string[], loadMoreLines: (offse
 
   const jumpToRead = (index: number) => {
     scrollToLine(index);
-    if (viewLine !== index) setViewLine(index);
+    if (viewLineRef.current !== index) updateViewLine(index);
     ttsScroll();
   };
 
@@ -56,15 +63,15 @@ export default function useBookNavigation(lines: string[], loadMoreLines: (offse
     userJump();
     userScroll();
 
-    if (viewLine !== index) setViewLine(index);
+    if (viewLineRef.current !== index) updateViewLine(index);
   };
 
   return {
     viewLine,
-    setViewLine,
+    updateViewLine,
+    viewLineRef,
     virtuosoRef,
     isSearchJumpingRef,
-    isViewLineVisibleRef,
     shouldReadViewLineRef,
     isUserScrollRef,
     userScroll,

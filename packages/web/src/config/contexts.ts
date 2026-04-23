@@ -4,7 +4,6 @@ import type { Book, BookContent, BookMark, BookSetting, Chapter, HighLight, Sear
 import { createContext, useContext, type Dispatch, type RefObject, type SetStateAction } from 'react';
 
 interface ICommonContext {
-  viewLine: number;
   isPlaying: boolean;
   handlePlayPause: () => void;
   readingMode: ReadingMode;
@@ -20,7 +19,6 @@ interface ICommonContext {
   handleLineClick: (index: number) => void;
 }
 const defaultCommonContext: ICommonContext = {
-  viewLine: 0,
   isPlaying: false,
   handlePlayPause: () => {},
   readingMode: 'tts',
@@ -43,7 +41,6 @@ export const useCommonContext = () => {
     return defaultCommonContext;
   }
   return {
-    viewLine: commonContext.viewLine,
     isPlaying: commonContext.isPlaying,
     handlePlayPause: commonContext.handlePlayPause,
     readingMode: commonContext.readingMode,
@@ -60,6 +57,27 @@ export const useCommonContext = () => {
   };
 };
 
+interface IViewLineContext {
+  viewLine: number;
+  updateViewLine: (index: number) => void;
+}
+const defaultViewLineContext: IViewLineContext = {
+  viewLine: 0,
+  updateViewLine: () => {},
+};
+export const ViewLineContext = createContext<IViewLineContext>(defaultViewLineContext);
+export const useViewLineContext = () => {
+  const viewLineContext = useContext(ViewLineContext);
+  if (!viewLineContext) {
+    console.error('ViewLine context is used out of scope');
+    return defaultViewLineContext;
+  }
+  return {
+    viewLine: viewLineContext.viewLine,
+    updateViewLine: viewLineContext.updateViewLine,
+  };
+};
+
 type IBookContext = Omit<
   Required<Book>,
   'userId' | 'title' | 'author' | 'source' | 'localPath' | 'coverPath' | 'extractedImages' | 'bookUrl' | 'fileType' | 'createdAt' | 'lastReadAt' | 'updatedAt'
@@ -73,6 +91,7 @@ type IBookContext = Omit<
   setHighlights: Dispatch<SetStateAction<HighLight[]>>;
   toggleHighlight: (indices: number[], texts: string[]) => void;
   deleteLine: (index: number) => Promise<void>;
+  restoreLine: (index: number) => Promise<void>;
 };
 const defaultBookContext: IBookContext = {
   _id: '',
@@ -91,6 +110,7 @@ const defaultBookContext: IBookContext = {
   viewChapter: undefined,
   book: undefined,
   deleteLine: () => Promise.resolve(),
+  restoreLine: () => Promise.resolve(),
 };
 export const BookContext = createContext<IBookContext>(defaultBookContext);
 export const useBookContext = () => {
@@ -116,6 +136,7 @@ export const useBookContext = () => {
     viewChapter: bookContext.viewChapter,
     book: bookContext.book,
     deleteLine: bookContext.deleteLine,
+    restoreLine: bookContext.restoreLine,
   };
 };
 

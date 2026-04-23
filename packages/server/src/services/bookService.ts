@@ -342,7 +342,7 @@ export class BookService {
     return updated;
   };
 
-  deleteContent = async (_id: string, index: number) => {
+  deleteLine = async (_id: string, index: number) => {
     let book = await this.bookRepository.getById(_id);
     if (!book) {
       throw new Error(`Book with ID ${_id} not found`);
@@ -359,6 +359,7 @@ export class BookService {
 
     // Mark line as deleted
     content.lines[index] = DELETE_MARKER + content.lines[index];
+    console.warn(`⚠️ Delete line ${index} for book ${_id}`);
 
     // Clean up metadata
     const chapters = (book.chapters || []).filter((c) => c.startIndex !== index && c.source !== '' + index);
@@ -367,6 +368,26 @@ export class BookService {
 
     await this.bookRepository.updateBook(_id, { chapters, bookmarks, highlights });
     await this.bookRepository.setContent(_id, content);
+  };
+
+  restoreLine = async (_id: string, index: number) => {
+    let book = await this.bookRepository.getById(_id);
+    if (!book) {
+      throw new Error(`Book with ID ${_id} not found`);
+    }
+
+    const content = await this.bookRepository.getContent(_id, 0, ALL_LINES);
+    if (!content) {
+      throw new Error(`Content for book with ID ${_id} not found`);
+    }
+
+    if (index < 0 || index >= content.lines.length) {
+      throw new Error(`Line index ${index} is out of bounds`);
+    }
+
+    // Restore deleted line
+    const lines = [...content.lines].map((line, i) => (i === index && line.startsWith(DELETE_MARKER) ? line.substring(DELETE_MARKER.length) : line));
+    await this.bookRepository.setContent(_id, { ...content, lines });
   };
 
   delete = async (_id: string) => {

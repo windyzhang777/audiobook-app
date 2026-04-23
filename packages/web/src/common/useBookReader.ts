@@ -1,8 +1,10 @@
+import { renderDeleteToaster } from '@/components/toaster';
 import { api } from '@/services/api';
 import { DELETE_MARKER, getNowISOString, IMAGE_MARKER, MAX_BOOKMARK_TEXT, PAGE_SIZE, removeMarker, type Book, type BookContent } from '@audiobook/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { triggerSuccess } from './triggerSuccess';
 import { useBookUpdate } from './useBookUpdate';
+import useToaster from './useToaster';
 
 export function useBookReader(_id: string | undefined) {
   const [loading, setLoading] = useState(true);
@@ -18,6 +20,8 @@ export function useBookReader(_id: string | undefined) {
   const [chapters, setChapters] = useState<NonNullable<Book['chapters']>>([]);
   const [bookmarks, setBookmarks] = useState<NonNullable<Book['bookmarks']>>([]);
   const [highlights, setHighlights] = useState<NonNullable<Book['highlights']>>([]);
+
+  const { toaster, showToaster, hideToaster } = useToaster();
 
   const updates: Partial<Book> = useMemo(() => ({ currentLine, lastCompleted, chapters, bookmarks, highlights }), [currentLine, lastCompleted, chapters, bookmarks, highlights]);
   const canUpdate =
@@ -152,9 +156,23 @@ export function useBookReader(_id: string | undefined) {
 
   const deleteLine = async (index: number) => {
     if (!_id) return;
+    if (!confirm(`Delete line ${index}: ${lines[index].length > MAX_BOOKMARK_TEXT ? lines[index].slice(0, MAX_BOOKMARK_TEXT) + '...' : lines[index]}?`)) return;
 
+    showToaster(
+      renderDeleteToaster(index, async () => {
+        hideToaster();
+        await restoreLine(index);
+      }),
+    );
     await api.books.deleteLine(_id, index);
     setLines((prev) => prev.map((line, i) => (i === index ? DELETE_MARKER + line : line)));
+  };
+
+  const restoreLine = async (index: number) => {
+    if (!_id) return;
+
+    await api.books.restoreLine(_id, index);
+    setLines((prev) => prev.map((line, i) => (i === index && line.startsWith(DELETE_MARKER) ? line.substring(DELETE_MARKER.length) : line)));
   };
 
   const updateBook = async (_id: string, updates: Partial<Book>) => {
@@ -232,5 +250,7 @@ export function useBookReader(_id: string | undefined) {
     hydrateChapterByIndex,
     loadMoreLines,
     deleteLine,
+    restoreLine,
+    toaster,
   };
 }

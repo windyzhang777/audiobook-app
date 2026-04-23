@@ -6,12 +6,14 @@ import { useTheme } from '@/components/theme-provider';
 import { ButtonGroup } from '@/components/ui/button-group';
 import { SidePanel } from '@/components/ui/SidePanel';
 import { Slider } from '@/components/ui/slider';
-import { useBookContext, useCommonContext, useContentContext, useSearchContext, useSettingContext, useSpeechContext } from '@/config/contexts';
+import { useBookContext, useCommonContext, useContentContext, useSearchContext, useSettingContext, useSpeechContext, useViewLineContext } from '@/config/contexts';
 import { FEATURES } from '@/config/features';
 import { cn } from '@/lib/utils';
+import { getChapter } from '@/utils';
 import {
   bookTitleWithAuthor,
   DELETE_MARKER,
+  escapeRegExp,
   FONT_SIZE_DEFAULT,
   FONT_SIZE_STEP,
   INDENT_DEFAULT,
@@ -34,12 +36,10 @@ import {
   RATE_STEP,
   removeMarker,
   type BookMark,
-  type Chapter,
 } from '@audiobook/shared';
 import {
   AArrowDown,
   AArrowUp,
-  AudioLines,
   Bookmark,
   BookmarkX,
   CaseSensitive,
@@ -51,6 +51,7 @@ import {
   ListChevronsUpDown,
   ListIndentDecrease,
   ListIndentIncrease,
+  LocateFixed,
   Minus,
   Moon,
   Plus,
@@ -67,6 +68,7 @@ import {
   TextAlignStart,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { renderRateToaster } from '../toaster';
 
 interface BookSidePanelProps {
   open: boolean;
@@ -192,6 +194,19 @@ export const SidePanelLeft = ({ open, onClose, onUpdateBookmark }: SidePanelLeft
           <Button size="icon" variant="ghost" disabled={isAtTop} onClick={scrollToTop} title="To list top">
             <SquareArrowUp />
           </Button>
+
+          {index === 0 && (
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => {
+                scrollToView(viewChapter?.chapterIndex);
+              }}
+              title="To read"
+            >
+              <LocateFixed />
+            </Button>
+          )}
 
           <Button size="icon" variant="ghost" disabled={isAtBottom} onClick={scrollToBottom} title="To list end">
             <SquareArrowDown />
@@ -324,9 +339,10 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
 
   const { theme, setTheme } = useTheme();
   const { toaster, showToaster } = useToaster();
-  const { toggleChapter, deleteLine } = useBookContext();
+  const { chapters, toggleChapter, deleteLine } = useBookContext();
   const { lines } = useContentContext();
-  const { viewLine, readingMode } = useCommonContext();
+  const { readingMode } = useCommonContext();
+  const { viewLine } = useViewLineContext();
   const {
     fontSize,
     setFontSize,
@@ -345,7 +361,25 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
     availableVoices,
   } = useSettingContext();
   const { isPlaying, resume } = useSpeechContext();
-  const { searchRes, currentMatch, clickMatch, prevMatch, nextMatch, closeSearch } = useSearchContext();
+  const { searchText, searchRes, currentMatch, clickMatch, prevMatch, nextMatch, closeSearch } = useSearchContext();
+
+  const getHighlightedText = (text: string, highlight: string) => {
+    if (!highlight?.trim()) return text;
+    const parts = text.split(new RegExp(`(${escapeRegExp(highlight)})`, 'gi'));
+    return (
+      <span>
+        {parts.map((part, i) =>
+          part.toLowerCase() === highlight.toLowerCase() ? (
+            <mark key={i} className={`rounded-md py-1 outline-none bg-highlight`}>
+              {part}
+            </mark>
+          ) : (
+            part
+          ),
+        )}
+      </span>
+    );
+  };
 
   useEffect(() => {
     scrollToView(currentMatch);
@@ -403,9 +437,10 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
                     const index = searchRes.findIndex((r) => r === res);
                     await clickMatch(index);
                   }}
-                  className={cn('relative w-full justify-start h-auto!', lines[res.index]?.startsWith(DELETE_MARKER) && 'hidden')}
+                  className={cn('relative w-full flex-col justify-start items-start! h-auto! gap-2! py-4', lines[res.index]?.startsWith(DELETE_MARKER) && 'hidden')}
                 >
-                  <span className="w-full text-wrap text-left font-normal!">{removeMarker(res.text)}</span>
+                  <span>{getChapter(res.index, chapters)?.title}</span>
+                  <span className="w-full text-wrap text-left font-normal!">{getHighlightedText(removeMarker(res.text), searchText)}</span>
                 </Button>
 
                 {FEATURES.ENABLE_CAHPTER_EDIT && (
@@ -521,7 +556,7 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
             </ButtonGroup>
             <Slider
               value={[fontSize || FONT_SIZE_DEFAULT]}
-              onValueChange={async (indexes: number[]) => setFontSize(indexes[0])}
+              onValueChange={async (indices: number[]) => setFontSize(indices[0])}
               min={MIN_FONT_SIZE}
               max={MAX_FONT_SIZE}
               step={FONT_SIZE_STEP}
@@ -554,7 +589,7 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
             </ButtonGroup>
             <Slider
               value={[lineHeight || LINE_HEIGHT_DEFAULT]}
-              onValueChange={async (indexes: number[]) => setLineHeight(indexes[0])}
+              onValueChange={async (indices: number[]) => setLineHeight(indices[0])}
               min={MIN_LINE_HEIGHT}
               max={MAX_LINE_HEIGHT}
               step={LINE_HEIGHT_STEP}
@@ -587,7 +622,7 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
             </ButtonGroup>
             <Slider
               value={[paragraphSpacing || PARAGRAPH_SPACING_DEFAULT]}
-              onValueChange={async (indexes: number[]) => setParagraphSpacing(indexes[0])}
+              onValueChange={async (indices: number[]) => setParagraphSpacing(indices[0])}
               min={MIN_PARAGRAPH_SPACING}
               max={MAX_PARAGRAPH_SPACING}
               step={PARAGRAPH_SPACING_STEP}
@@ -618,7 +653,7 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
                 <ListIndentIncrease strokeWidth={1.5} className="w-5! h-5!" />
               </Button>
             </ButtonGroup>
-            <Slider value={[indent ?? INDENT_DEFAULT]} onValueChange={async (indexes: number[]) => setIndent(indexes[0])} min={MIN_INDENT} max={MAX_INDENT} step={INDENT_STEP} className="mt-2" />
+            <Slider value={[indent ?? INDENT_DEFAULT]} onValueChange={async (indices: number[]) => setIndent(indices[0])} min={MIN_INDENT} max={MAX_INDENT} step={INDENT_STEP} className="mt-2" />
           </div>
 
           {/* Alignment */}
@@ -700,8 +735,8 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
             </ButtonGroup>
             <Slider
               value={[rate || RATE_DEFAULT]}
-              onValueChange={async (indexes: number[]) => {
-                const newRate = indexes[0];
+              onValueChange={async (indices: number[]) => {
+                const newRate = indices[0];
                 setRate(newRate);
                 showToaster(renderRateToaster(newRate));
                 if (isPlaying) resume();
@@ -718,17 +753,4 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
       )}
     </SidePanel>
   );
-};
-
-const renderRateToaster = (rate: number): React.ReactNode => (
-  <>
-    <AudioLines size={16} className="hidden md:block" />
-    <span className="font-semibold whitespace-nowrap">{rate}x</span>
-  </>
-);
-
-export const renderChapterToaster = (chapter: Chapter): React.ReactNode => {
-  if (!chapter?.title) return <></>;
-
-  return <span className="font-semibold whitespace-nowrap">{chapter.title}</span>;
 };

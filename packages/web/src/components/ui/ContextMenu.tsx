@@ -166,6 +166,10 @@ export const TextContextMenu = () => {
         variant="ghost"
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => {
+          if (position.indices.length > 1) {
+            clearSelection();
+            return;
+          }
           toggleBookmark(position.indices[0], lines[position.indices[0]]);
           clearSelection();
         }}
@@ -191,6 +195,10 @@ export const TextContextMenu = () => {
           variant="ghost"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
+            if (position.indices.length > 1) {
+              clearSelection();
+              return;
+            }
             toggleChapter(position.indices[0], lines[position.indices[0]]);
             clearSelection();
           }}
@@ -205,9 +213,11 @@ export const TextContextMenu = () => {
           variant="ghost"
           onMouseDown={(e) => e.preventDefault()}
           onClick={async () => {
-            for (const index of position.indices) {
-              await deleteLine(index);
+            if (position.indices.length > 1) {
+              clearSelection();
+              return;
             }
+            await deleteLine(position.indices[0]);
             clearSelection();
           }}
         >

@@ -258,6 +258,12 @@ export const api = {
       });
     },
 
+    restoreLine: async (_id: string, lineIndex: number) => {
+      await fetch(`/api/books/${_id}/content?line=${lineIndex}`, {
+        method: 'POST',
+      });
+    },
+
     delete: async (_id: string) => {
       await fetch(`/api/books/${_id}`, {
         method: 'DELETE',
@@ -291,6 +297,16 @@ export const api = {
           },
         };
       }
+    },
+
+    getCover: async (uploadId: string): Promise<{ coverPath: string | null }> => {
+      const response = await fetch(`/api/upload/cover/${uploadId}`);
+
+      if (!response.ok) {
+        const errorMessage = await getErrorMessage(response);
+        throw new Error(errorMessage);
+      }
+      return response.json();
     },
   },
 };

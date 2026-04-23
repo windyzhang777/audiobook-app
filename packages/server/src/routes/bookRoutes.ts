@@ -70,11 +70,12 @@ export const bookRoutes = (bookController: BookController) => {
   router.post('/:id/refresh', bookController.updateChapters);
   router.post('/:id/hydrate/:index', bookController.hydrateChapter);
   router.post('/:id/rehydrate/:index', bookController.reHydrateFromChapter);
+  router.post('/:id/content', bookController.restoreLine);
   router.put('/:id/upload', uploadImage.single('cover'), bookController.updateWithCover);
   router.patch('/:id', bookController.updateBook);
   router.patch('/:id/setting', bookController.updateSetting);
   router.delete('/:id', bookController.delete);
-  router.delete('/:id/content', bookController.deleteContent);
+  router.delete('/:id/content', bookController.deleteLine);
 
   return router;
 };

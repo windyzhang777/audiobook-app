@@ -10,11 +10,11 @@ import { BookLine } from '@/components/BookReader/BookLine';
 import { SidePanelLeft, SidePanelRight } from '@/components/BookReader/BookSidePanel';
 import { Button } from '@/components/ui/button';
 import { TextContextMenu } from '@/components/ui/ContextMenu';
-import { BookContext, CommonContext, ContentContext, SearchContext, SettingContext, SpeechContext } from '@/config/contexts';
+import { BookContext, CommonContext, ContentContext, SearchContext, SettingContext, SpeechContext, ViewLineContext } from '@/config/contexts';
 import { focusBody, getChapterIndex } from '@/utils';
 import { bookTitleWithAuthor, type BookMark } from '@audiobook/shared';
 import { Loader, Loader2 } from 'lucide-react';
-import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Virtuoso } from 'react-virtuoso';
 
@@ -58,6 +58,8 @@ export const BookReader = () => {
     hydrateChapterByIndex,
     loadMoreLines,
     deleteLine,
+    restoreLine,
+    toaster,
   } = useBookReader(_id);
 
   const {
@@ -81,7 +83,7 @@ export const BookReader = () => {
   } = useReaderSettings(_id, lang);
 
   // navigation hook
-  const { viewLine, setViewLine, virtuosoRef, isSearchJumpingRef, isViewLineVisibleRef, shouldReadViewLineRef, isUserScrollRef, userScroll, ttsScroll, scrollToLine, jumpToRead, jumpToIndex } =
+  const { viewLine, updateViewLine, viewLineRef, virtuosoRef, isSearchJumpingRef, shouldReadViewLineRef, isUserScrollRef, userScroll, ttsScroll, scrollToLine, jumpToRead, jumpToIndex } =
     useBookNavigation(lines, loadMoreLines);
 
   // speech hook
@@ -98,6 +100,8 @@ export const BookReader = () => {
 
   const [openPanelLeft, setOpenPanelLeft] = useState(true);
   const [openPanelRight, setOpenPanelRight] = useState(readingMode === 'search' ? searchRes.length > 0 : true);
+
+  const isViewLineVisibleRef = useRef(false);
 
   const viewChapter = useMemo(() => {
     if (!chapters) return undefined;
@@ -117,10 +121,11 @@ export const BookReader = () => {
   const startFromLine = useCallback(
     (index: number) => {
       setCurrentLine((prev) => (prev !== index ? index : prev));
-      setViewLine((prev) => (prev !== index ? index : prev));
+      startTimer(() => updateViewLine(index), 100);
+      closeSearch();
       ttsScroll();
     },
-    [setCurrentLine, setViewLine, ttsScroll],
+    [setCurrentLine, startTimer, updateViewLine, closeSearch, ttsScroll],
   );
 
   const navigateBack = (replace: boolean = false) => {
@@ -132,7 +137,7 @@ export const BookReader = () => {
     if (isPlaying) {
       pause();
     } else {
-      let startFrom = shouldReadViewLineRef.current ? viewLine : currentLine;
+      let startFrom = shouldReadViewLineRef.current ? viewLineRef.current : currentLine;
       startFrom = startFrom >= totalLines ? 0 : startFrom; // if at the end, reset to start from the first line
       startFromLine(startFrom);
 
@@ -141,12 +146,16 @@ export const BookReader = () => {
       shouldReadViewLineRef.current = false;
     }
     focusBody();
-  }, [currentLine, startFromLine, isPlaying, startAnimationFrame, scrollToLine, totalLines, viewLine, shouldReadViewLineRef, play, pause]);
+  }, [currentLine, startFromLine, isPlaying, startAnimationFrame, scrollToLine, totalLines, viewLineRef, shouldReadViewLineRef, play, pause]);
 
   const handleLineClick = (index: number) => {
     // if (readingMode === 'edit') return;
     startFromLine(index);
-    play(index);
+    if (isPlaying) {
+      resume(index);
+    } else {
+      play(index);
+    }
   };
 
   // cleanup on unmount
@@ -157,8 +166,8 @@ export const BookReader = () => {
     if (isUserScrollRef.current || !isPlaying) return;
     scrollToLine(currentLine, 'smooth');
 
-    startTimer(() => setViewLine((prev) => (!isSearchJumpingRef.current && currentLine !== prev ? currentLine : prev)));
-  }, [isPlaying, currentLine, scrollToLine, startTimer, isSearchJumpingRef, isUserScrollRef, setViewLine]);
+    if (!isSearchJumpingRef.current && currentLine !== viewLine) startTimer(() => updateViewLine(currentLine), 100);
+  }, [isPlaying, currentLine, scrollToLine, startTimer, isSearchJumpingRef, isUserScrollRef, viewLine, updateViewLine]);
 
   // hijack the browser's default scroll
   useEffect(() => {
@@ -219,135 +228,140 @@ export const BookReader = () => {
 
   return (
     <CommonContext.Provider
-      value={{ viewLine, isPlaying, handlePlayPause, readingMode, jumpToIndex, jumpToRead: () => jumpToRead(currentLine), ttsScroll, userScroll, navigateBack, hydrateChapterByIndex, handleLineClick }}
+      value={{ isPlaying, handlePlayPause, readingMode, jumpToIndex, jumpToRead: () => jumpToRead(currentLine), ttsScroll, userScroll, navigateBack, hydrateChapterByIndex, handleLineClick }}
     >
-      <BookContext.Provider
-        value={{
-          _id,
-          currentLine,
-          totalLines,
-          lastCompleted,
-          chapters,
-          setChapters,
-          toggleChapter,
-          bookmarks,
-          setBookmarks,
-          toggleBookmark,
-          highlights,
-          setHighlights,
-          toggleHighlight,
-          viewChapter,
-          book,
-          deleteLine,
-        }}
-      >
-        <ContentContext.Provider value={{ lines, lang, hasMore }}>
-          <SearchContext.Provider value={{ searchInputRef, searchText, setSearchText, searchRes, currentMatch, clickMatch, prevMatch, nextMatch, openSearch, closeSearch }}>
-            <SettingContext.Provider
-              value={{
-                fontSize,
-                setFontSize,
-                rate,
-                setRate,
-                setVoice,
-                selectedVoice,
-                lineHeight,
-                setLineHeight,
-                paragraphSpacing,
-                setParagraphSpacing,
-                indent,
-                setIndent,
-                alignment,
-                setAlignment,
-                availableVoices,
-              }}
-            >
-              <SpeechContext.Provider value={{ isPlaying, play, pause, resume: () => resume(currentLine), stop }}>
-                <div className="min-h-full relative overflow-hidden">
-                  <BookHeader setOpenPanelLeft={setOpenPanelLeft} setOpenPanelRight={setOpenPanelRight} />
+      <ViewLineContext.Provider value={{ viewLine, updateViewLine }}>
+        <BookContext.Provider
+          value={{
+            _id,
+            currentLine,
+            totalLines,
+            lastCompleted,
+            chapters,
+            setChapters,
+            toggleChapter,
+            bookmarks,
+            setBookmarks,
+            toggleBookmark,
+            highlights,
+            setHighlights,
+            toggleHighlight,
+            viewChapter,
+            book,
+            deleteLine,
+            restoreLine,
+          }}
+        >
+          <ContentContext.Provider value={{ lines, lang, hasMore }}>
+            <SearchContext.Provider value={{ searchInputRef, searchText, setSearchText, searchRes, currentMatch, clickMatch, prevMatch, nextMatch, openSearch, closeSearch }}>
+              <SettingContext.Provider
+                value={{
+                  fontSize,
+                  setFontSize,
+                  rate,
+                  setRate,
+                  setVoice,
+                  selectedVoice,
+                  lineHeight,
+                  setLineHeight,
+                  paragraphSpacing,
+                  setParagraphSpacing,
+                  indent,
+                  setIndent,
+                  alignment,
+                  setAlignment,
+                  availableVoices,
+                }}
+              >
+                <SpeechContext.Provider value={{ isPlaying, play, pause, resume: () => resume(currentLine), stop }}>
+                  <div className="min-h-full relative overflow-hidden">
+                    <BookHeader setOpenPanelLeft={setOpenPanelLeft} setOpenPanelRight={setOpenPanelRight} toaster={toaster} />
 
-                  <TextContextMenu />
+                    <TextContextMenu />
 
-                  {/* Start of Virtuoso */}
-                  <Virtuoso
-                    id="book-lines"
-                    ref={virtuosoRef}
-                    className="fixed top-22 leading-loose transition-transform duration-500 ease-in-out"
-                    style={{ minHeight: 'calc(100vh - 5rem)' }}
-                    data={lines}
-                    initialTopMostItemIndex={{ index: 0, align: 'center' }}
-                    increaseViewportBy={200}
-                    endReached={(index) => {
-                      if (!canFetch || isFetchingRef.current || isSearchJumpingRef.current) return;
-                      if (index < lines.length - 1) return;
-                      loadMoreLines(lines.length);
-                    }}
-                    atBottomStateChange={(atBottom) => {
-                      if (!canFetch || isFetchingRef.current || !atBottom) return;
-                      loadMoreLines(lines.length);
-                    }}
-                    rangeChanged={(range) => {
-                      isViewLineVisibleRef.current = viewLine >= range.startIndex && viewLine <= range.endIndex;
-                    }}
-                    components={{
-                      List: forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ style, children, ...props }, ref) => (
-                        <div
-                          {...props}
-                          ref={ref}
-                          tabIndex={0}
-                          onWheel={userScroll}
-                          onTouchMove={userScroll}
-                          className="top-20 outline-none list-none text-left mx-auto w-11/12 md:w-5/8"
-                          style={{ ...style, fontSize, lineHeight, textAlign: alignment, paddingLeft: indent + 'ch', paddingRight: indent + 'ch' }}
-                        >
-                          {children}
-                        </div>
-                      )),
-                      Footer: () => (
-                        <div className="h-20 w-full flex justify-center items-center text-sm text-gray-300">
-                          {loadingMore ? (
-                            <span className="flex justify-center items-center">
-                              <Loader2 className="animate-spin mr-2" size={16} />
-                              &nbsp;Loading more...
-                            </span>
-                          ) : !hasMore ? (
-                            <span>You've reach the end</span>
-                          ) : null}
-                        </div>
-                      ),
-                    }}
-                    // Individual Line Item
-                    itemContent={(index, line) => <BookLine index={index} line={line} />}
-                  />
-                  {/* End of Virtuoso */}
+                    {/* Start of Virtuoso */}
+                    <Virtuoso
+                      id="book-lines"
+                      ref={virtuosoRef}
+                      className="fixed top-22 leading-loose transition-transform duration-500 ease-in-out"
+                      style={{ minHeight: 'calc(100vh - 5rem)' }}
+                      data={lines}
+                      initialTopMostItemIndex={{ index: 0, align: 'center' }}
+                      increaseViewportBy={200}
+                      endReached={(index) => {
+                        if (!canFetch || isFetchingRef.current || isSearchJumpingRef.current) return;
+                        if (index < lines.length - 1) return;
+                        loadMoreLines(lines.length);
+                      }}
+                      atBottomStateChange={(atBottom) => {
+                        if (!canFetch || isFetchingRef.current || !atBottom) return;
+                        loadMoreLines(lines.length);
+                      }}
+                      rangeChanged={(range) => {
+                        isViewLineVisibleRef.current = viewLineRef.current >= range.startIndex && viewLineRef.current <= range.endIndex;
+                        // const centerIndex = Math.floor((range.startIndex + range.endIndex) / 2);
+                        // if (isUserScrollRef.current && readingMode !== 'search') setViewLine(centerIndex);
+                      }}
+                      components={{
+                        List: forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ style, children, ...props }, ref) => (
+                          <div
+                            {...props}
+                            ref={ref}
+                            tabIndex={0}
+                            onWheel={userScroll}
+                            onTouchMove={userScroll}
+                            className="top-20 outline-none list-none text-left mx-auto w-11/12 md:w-8/12"
+                            style={{ ...style, fontSize, lineHeight, textAlign: alignment, paddingLeft: indent + 'ch', paddingRight: indent + 'ch' }}
+                          >
+                            {children}
+                          </div>
+                        )),
+                        Footer: () => (
+                          <div className="h-20 w-full flex justify-center items-center text-sm text-gray-300">
+                            {loadingMore ? (
+                              <span className="flex justify-center items-center">
+                                <Loader2 className="animate-spin mr-2" size={16} />
+                                &nbsp;Loading more...
+                              </span>
+                            ) : !hasMore ? (
+                              <span>You've reach the end</span>
+                            ) : null}
+                          </div>
+                        ),
+                      }}
+                      // Individual Line Item
+                      itemContent={(index, line) => <BookLine index={index} line={line} />}
+                    />
+                    {/* End of Virtuoso */}
 
-                  {/* Left Panel */}
-                  <SidePanelLeft
-                    open={openPanelLeft}
-                    onClose={() => setOpenPanelLeft(false)}
-                    onUpdateBookmark={(merged: BookMark[]) => {
-                      setBookmarks(merged);
-                      alert(`Imported ${merged.length} bookmarks for ${bookTitleWithAuthor(book)}!`);
-                      setTimeout(() => {
-                        flushUpdate();
-                      }, 100);
-                    }}
-                  />
+                    {/* Left Panel */}
+                    <SidePanelLeft
+                      open={openPanelLeft}
+                      onClose={() => setOpenPanelLeft(false)}
+                      onUpdateBookmark={(merged: BookMark[]) => {
+                        setBookmarks(merged);
+                        alert(`Imported ${merged.length} bookmarks for ${bookTitleWithAuthor(book)}!`);
+                        setTimeout(() => {
+                          flushUpdate();
+                        }, 100);
+                      }}
+                    />
 
-                  {/* Right Panel */}
-                  <SidePanelRight
-                    open={openPanelRight}
-                    onClose={() => {
-                      closeSearch();
-                      setOpenPanelRight(false);
-                    }}
-                  />
-                </div>
-              </SpeechContext.Provider>
-            </SettingContext.Provider>
-          </SearchContext.Provider>
-        </ContentContext.Provider>
-      </BookContext.Provider>
+                    {/* Right Panel */}
+                    <SidePanelRight
+                      open={openPanelRight}
+                      onClose={() => {
+                        closeSearch();
+                        setOpenPanelRight(false);
+                      }}
+                    />
+                  </div>
+                </SpeechContext.Provider>
+              </SettingContext.Provider>
+            </SearchContext.Provider>
+          </ContentContext.Provider>
+        </BookContext.Provider>
+      </ViewLineContext.Provider>
     </CommonContext.Provider>
   );
 };

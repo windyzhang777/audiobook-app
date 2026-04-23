@@ -1,4 +1,4 @@
-import { useBookContext, useCommonContext, useSearchContext, useSettingContext } from '@/config/contexts';
+import { useBookContext, useCommonContext, useSearchContext, useSettingContext, useViewLineContext } from '@/config/contexts';
 import { cn } from '@/lib/utils';
 import { CHAPTER_MARKER, DELETE_MARKER, escapeRegExp, IMAGE_MARKER, removeMarker } from '@audiobook/shared';
 import React from 'react';
@@ -10,7 +10,8 @@ interface BookLineProps extends React.HTMLAttributes<HTMLLIElement> {
 
 export const BookLine = ({ index, line }: BookLineProps) => {
   const { currentLine, book, chapters, bookmarks, highlights } = useBookContext();
-  const { viewLine, readingMode, handleLineClick } = useCommonContext();
+  const { readingMode, handleLineClick } = useCommonContext();
+  const { viewLine } = useViewLineContext();
   const { searchText, searchRes, currentMatch } = useSearchContext();
   const isBookmarked = bookmarks.some((b) => b.index === index);
   const highlightTexts = highlights.filter((h) => h.indices.includes(index)).flatMap((h) => h.texts[h.indices.indexOf(index)]);
@@ -29,7 +30,7 @@ export const BookLine = ({ index, line }: BookLineProps) => {
       <span>
         {parts.map((part, i) =>
           part.toLowerCase() === highlight.toLowerCase() ? (
-            <mark key={i} className={`rounded-md py-1 outline-none bg-highlight ${isCurrentMatch ? 'bg-highlight' : isHightlight ? 'bg-primary' : 'outline-none'}`}>
+            <mark key={i} className={`rounded-md outline-none bg-highlight ${isCurrentMatch ? 'bg-highlight' : isHightlight ? 'bg-primary' : 'outline-none'}`}>
               {part}
             </mark>
           ) : (
