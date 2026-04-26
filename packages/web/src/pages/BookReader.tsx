@@ -4,7 +4,6 @@ import { useBookReader } from '@/common/useBookReader';
 import { useBookSearch } from '@/common/useBookSearch';
 import { useReaderSettings } from '@/common/useBookSettings';
 import useBookSpeech from '@/common/useBookSpeech';
-import useTimer from '@/common/useTimer';
 import { BookControl } from '@/components/BookReader/BookControl';
 import { BookHeader } from '@/components/BookReader/BookHeader';
 import { BookLine } from '@/components/BookReader/BookLine';
@@ -12,10 +11,11 @@ import { SidePanelLeft, SidePanelRight } from '@/components/BookReader/BookSideP
 import { Button } from '@/components/ui/button';
 import { TextContextMenu } from '@/components/ui/ContextMenu';
 import { BookContext, CommonContext, ContentContext, SearchContext, SettingContext, SpeechContext, ViewLineContext } from '@/config/contexts';
+import { wordHighlightStore } from '@/stores/wordHighlightStore';
 import { focusBody, getChapterIndex } from '@/utils';
 import { bookTitleWithAuthor, type BookMark } from '@audiobook/shared';
 import { ChevronRight, Loader, Loader2 } from 'lucide-react';
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Virtuoso } from 'react-virtuoso';
 
@@ -28,7 +28,6 @@ export const BookReader = () => {
   const [readingMode, setReadingMode] = useState<ReadingMode>('tts');
 
   // timer hook
-  const { startTimer } = useTimer();
   const { startAnimationFrame } = useAnimationFrame();
 
   // data hooks
@@ -84,12 +83,25 @@ export const BookReader = () => {
     availableVoices,
   } = useReaderSettings(_id, lang);
 
-  // navigation hook
-  const { viewLine, updateViewLine, viewLineRef, virtuosoRef, isSearchJumpingRef, shouldReadViewLineRef, isUserScrollRef, userScroll, ttsScroll, scrollToLine, jumpToRead, jumpToIndex } =
-    useBookNavigation(lines, loadMoreLines);
-
   // speech hook
   const { isPlaying, play, pause, resume, stop } = useBookSpeech(_id, lines, lang, totalLines, selectedVoice, rate, currentLine, updateCurrentLine, loadMoreLines, onBookCompleted);
+
+  // navigation hook
+  const {
+    viewLine,
+    updateViewLine,
+    viewLineRef,
+    isCurrentLineVisible,
+    virtuosoRef,
+    scrollerRef,
+    isSearchJumpingRef,
+    shouldReadViewLineRef,
+    userScroll,
+    ttsScroll,
+    scrollToLine,
+    jumpToRead,
+    jumpToIndex,
+  } = useBookNavigation(isPlaying, currentLine, lines, loadMoreLines);
 
   // search hook
   const { searchInputRef, searchText, setSearchText, searchRes, currentMatch, clickMatch, prevMatch, nextMatch, openSearch, closeSearch } = useBookSearch(
@@ -102,9 +114,6 @@ export const BookReader = () => {
 
   const [openPanelLeft, setOpenPanelLeft] = useState(true);
   const [openPanelRight, setOpenPanelRight] = useState(readingMode === 'search' ? searchRes.length > 0 : true);
-  const scrollerRef = useRef<HTMLElement | null>(null);
-  const [isCurrentLineVisible, setIsCurrentLineVisible] = useState(false);
-  const isCurrentLineVisibleRef = useRef(false);
 
   const viewChapter = useMemo(() => {
     if (!chapters) return undefined;
@@ -134,6 +143,10 @@ export const BookReader = () => {
     ttsScroll();
   }, [closeSearch, ttsScroll]);
 
+  const readFocus = useCallback(() => {
+    jumpToRead(currentLineRef.current);
+  }, [jumpToRead, currentLineRef]);
+
   const navigateBack = (replace: boolean = false) => {
     flushUpdate();
     navigate('/', { replace });
@@ -156,9 +169,7 @@ export const BookReader = () => {
   }, [currentLineRef, viewLineRef, startFromLine, ttsFocus, isPlaying, startAnimationFrame, scrollToLine, totalLines, shouldReadViewLineRef, play, pause]);
 
   const handleLineClick = (index: number) => {
-    // if (readingMode === 'edit') return;
     startFromLine(index);
-    scrollToLine(currentLine, 'smooth');
     ttsFocus();
     if (isPlaying) {
       resume(index);
@@ -170,12 +181,11 @@ export const BookReader = () => {
   const moveToLine = useCallback(
     (index: number) => {
       if (index == currentLineRef.current) return;
-      scrollToLine(index);
       startFromLine(index);
       ttsFocus();
       if (isPlaying) stop();
     },
-    [currentLineRef, isPlaying, scrollToLine, startFromLine, ttsFocus, stop],
+    [currentLineRef, isPlaying, startFromLine, ttsFocus, stop],
   );
 
   const prevLine = useCallback(() => {
@@ -188,39 +198,9 @@ export const BookReader = () => {
     moveToLine(index);
   }, [currentLineRef, totalLines, moveToLine]);
 
-  const checkLineVisibility = useCallback((index: number) => {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-
-    const target = scroller.querySelector(`[data-item-index="${index}"]`);
-    if (!target) return false;
-
-    const scrollerRect = scroller.getBoundingClientRect();
-    const itemRect = target.getBoundingClientRect();
-    const isVisible = itemRect.top >= scrollerRect.top && itemRect.bottom <= scrollerRect.bottom;
-    return isVisible;
-  }, []);
-
   // cleanup on unmount
   useEffect(() => () => stop(), [_id, stop]);
 
-  // tts autoscroll
-  useEffect(() => {
-    const isVisible = checkLineVisibility(currentLine);
-    isCurrentLineVisibleRef.current = isVisible || false;
-    if (isCurrentLineVisibleRef.current !== isCurrentLineVisible) {
-      startTimer(() => setIsCurrentLineVisible(isCurrentLineVisibleRef.current));
-    }
-
-    if (isUserScrollRef.current || isVisible || !isPlaying) return;
-    scrollToLine(currentLine, 'smooth');
-
-    if (!isSearchJumpingRef.current && currentLine !== viewLineRef.current) {
-      startTimer(() => updateViewLine(currentLine), 100);
-    }
-  }, [checkLineVisibility, isCurrentLineVisible, isPlaying, currentLine, viewLineRef, scrollToLine, startTimer, isSearchJumpingRef, isUserScrollRef, updateViewLine]);
-
-  // hijack the browser's default scroll
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const activeElement = document.activeElement;
@@ -275,7 +255,7 @@ export const BookReader = () => {
         handlePlayPause,
         readingMode,
         jumpToIndex,
-        jumpToRead: () => jumpToRead(currentLineRef.current),
+        jumpToRead: readFocus,
         ttsScroll,
         userScroll,
         navigateBack,
@@ -389,17 +369,7 @@ export const BookReader = () => {
                     <TextContextMenu />
 
                     {/* Indicator Message */}
-                    {!isCurrentLineVisible && (
-                      <Button
-                        variant="ghost"
-                        id="indicator-message"
-                        onClick={() => jumpToRead(currentLineRef.current)}
-                        className="z-20 w-[40%] p-2 truncate absolute top-25 left-1/2 -translate-x-1/2 px-4 py-1 text-sm justify-start bg-highlight"
-                      >
-                        <ChevronRight size={12} />
-                        <span className="w-full truncate">{lines[currentLine]}</span>
-                      </Button>
-                    )}
+                    {!isCurrentLineVisible && lines[currentLine] && <ActiveWordIndicator line={lines[currentLine]} onClick={readFocus} />}
 
                     {/* Left Panel */}
                     <SidePanelLeft
@@ -430,5 +400,18 @@ export const BookReader = () => {
         </BookContext.Provider>
       </ViewLineContext.Provider>
     </CommonContext.Provider>
+  );
+};
+
+const ActiveWordIndicator = ({ line, onClick }: { line: string; onClick: () => void }) => {
+  const activeWord = useSyncExternalStore(wordHighlightStore.subscribe, wordHighlightStore.getActiveWord);
+  const hasActive = activeWord && activeWord.charIndex >= 0;
+  const word = hasActive && activeWord ? line.slice(activeWord.charIndex, activeWord.charIndex + activeWord.charLength) : line.slice(0, 5);
+
+  return (
+    <Button variant="ghost" id="indicator-message" onClick={onClick} className="z-20 p-2 truncate absolute top-25 left-1/2 -translate-x-1/2 px-4 py-1 text-sm justify-start bg-highlight">
+      <ChevronRight size={12} />
+      <mark className="rounded-md outline-none bg-primary">{word}</mark>
+    </Button>
   );
 };

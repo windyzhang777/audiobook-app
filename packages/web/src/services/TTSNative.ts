@@ -1,5 +1,5 @@
 import { getNowISOString, type SpeechOptions } from '@audiobook/shared';
-import type { SpeechStatus } from './SpeechService';
+import type { SpeechStatus } from './speechService';
 
 export interface TTSConfigs extends Omit<SpeechOptions, 'voice'> {
   voice?: SpeechSynthesisVoice | string;
@@ -19,7 +19,7 @@ export class TTSNative {
     };
   }
 
-  speak(text: string, configs: TTSConfigs = {}, onEnd?: () => void, onError?: () => void): void {
+  speak(text: string, configs: TTSConfigs = {}, onEnd?: () => void, onError?: () => void, onBoundary?: (charIndex: number, charLength: number) => void): void {
     // Cancel any ongoing speech
     this.stop();
 
@@ -35,8 +35,11 @@ export class TTSNative {
       this.utterance.voice = typeof configs.voice === 'string' ? this.getVoice(configs) : configs.voice;
     }
 
-    this.utterance.onboundary = () => {
+    this.utterance.onboundary = (event) => {
       this.lastBoundaryTimestamp = performance.now();
+      if (event.name === 'word') {
+        onBoundary?.(event.charIndex, event.charLength);
+      }
     };
 
     this.utterance.onstart = () => {

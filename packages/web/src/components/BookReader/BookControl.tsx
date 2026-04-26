@@ -16,7 +16,7 @@ export const BookControl = () => {
   if (!book || currentLine === undefined) return null;
 
   return (
-    <div className={cn('fixed z-10 left-1/2 bottom-5 -translate-x-1/2 bg-background px-10 py-5 rounded-md shadow', 'flex flex-col gap-4 text-sm')}>
+    <div className={cn('fixed z-10 left-1/2 bottom-4 -translate-x-1/2 bg-background px-4 pb-4 rounded-md shadow', 'flex flex-col gap-2 text-sm')}>
       <div className="text-black/50 text-xs flex justify-between items-center [&_span]:w-20">
         <span className="flex justify-start whitespace-nowrap">
           {currentLine} / {totalLines}

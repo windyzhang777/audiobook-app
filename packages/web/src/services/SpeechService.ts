@@ -1,6 +1,6 @@
 import { VOICE_FALLBACK, type VoiceOption } from '@/common/useBookSettings';
-import { TTSNative } from '@/services/TTSNative';
 import { hasMarker, MAX_BOOKMARK_TEXT, type BookContent, type SpeechOptions } from '@audiobook/shared';
+import { TTSNative } from './ttsNative';
 
 export type SpeechStatus = 'idle' | 'speaking' | 'paused' | 'loading';
 
@@ -22,6 +22,7 @@ export class SpeechService {
   onIsPlayingChange: ((isPlaying: boolean) => void) | null = null;
   onLoadMoreLines: ((index: number) => void) | null = null;
   onBookCompleted: (() => void) | null = null;
+  onWordBoundary: ((lineIndex: number, charIndex: number, charLength: number) => void) | null = null;
 
   private constructor() {
     this.silentAudio.loop = true;
@@ -136,6 +137,7 @@ export class SpeechService {
       { ...configs, voice: configs.selectedVoice.id },
       () => {
         const next = index + 1;
+        this.onWordBoundary?.(index, -1, 0); // Reset word highlight at line end
         this.onLineEnd?.(next);
         this.start(next, configs);
       },
@@ -144,6 +146,9 @@ export class SpeechService {
           console.warn('⚠️ TTS error on line:', configs.lines[index].slice(0, MAX_BOOKMARK_TEXT) + '...');
           this.onIsPlayingChange?.(false);
         }
+      },
+      (charIndex, charLength) => {
+        this.onWordBoundary?.(index, charIndex, charLength);
       },
     );
   };
@@ -158,6 +163,7 @@ export class SpeechService {
       navigator.mediaSession.playbackState = 'none';
       this.clearMediaSession();
     }
+    this.onWordBoundary?.(0, -1, 0); // Reset word highlight
 
     this.onIsPlayingChange?.(false);
   }

@@ -1,5 +1,5 @@
 import { api } from '@/services/api';
-import { speechService } from '@/services/SpeechService';
+import { speechService } from '@/services/speechService';
 import {
   ALIGNMENT_DEFAULT,
   FONT_SIZE_DEFAULT,

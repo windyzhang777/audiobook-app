@@ -1,5 +1,6 @@
 import { type VoiceOption } from '@/common/useBookSettings';
-import { speechService } from '@/services/SpeechService';
+import { speechService } from '@/services/speechService';
+import { wordHighlightStore } from '@/stores/wordHighlightStore';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export default function useBookSpeech(
@@ -51,12 +52,20 @@ export default function useBookSpeech(
       loadMoreLines(linesIndex);
     };
     speechService.onBookCompleted = () => onBookCompleted();
+    speechService.onWordBoundary = (lineIndex, charIndex, charLength) => {
+      if (charIndex < 0) {
+        wordHighlightStore.setActiveWord(null);
+      } else {
+        wordHighlightStore.setActiveWord({ lineIndex, charIndex, charLength });
+      }
+    };
 
     return () => {
       speechService.onLineEnd = null;
       speechService.onIsPlayingChange = null;
       speechService.onLoadMoreLines = null;
       speechService.onBookCompleted = null;
+      speechService.onWordBoundary = null;
     };
   }, [onLineEnd, loadMoreLines, onBookCompleted]);
 

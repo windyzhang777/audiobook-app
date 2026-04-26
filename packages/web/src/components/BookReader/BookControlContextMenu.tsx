@@ -5,7 +5,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/compon
 import { Slider } from '@/components/ui/slider';
 import { useContentContext, useSettingContext, useSpeechContext } from '@/config/contexts';
 import { MAX_RATE, MIN_RATE, RATE_DEFAULT, RATE_STEP } from '@audiobook/shared';
-import { FastForward, Rewind } from 'lucide-react';
+import { Minus, Plus } from 'lucide-react';
 
 interface BookControlContextMenuProps {
   title: string;
@@ -106,36 +106,68 @@ export const RateContextMenu = (props: BookControlContextMenuProps) => {
           onCloseAutoFocus={(e) => e.preventDefault()}
           className="w-full p-6"
         >
-          <div className="flex flex-col gap-2">
-            <div className="uppercase text-xs">speech rate</div>
-            <ButtonGroup className="flex-wrap w-full gap-2">
+          <div className="flex flex-col gap-4 w-40">
+            <ButtonGroup className="flex justify-between items-center gap-4 w-full">
               <Button
                 size="icon"
-                variant="outline"
+                variant="secondary"
                 disabled={rate! <= MIN_RATE}
                 onClick={() => {
                   const newRate = Math.max(MIN_RATE, rate! - RATE_STEP);
                   setRate(newRate);
-                  // showToaster(renderRateToaster(newRate));
                   if (isPlaying) resume();
                 }}
-                className="grow border! border-sidebar-accent!"
               >
-                <Rewind strokeWidth={1} className="w-6! h-6!" />
+                <Minus strokeWidth={1} className="w-6! h-6!" />
               </Button>
+              <span className="font-semibold">{rate}x</span>
               <Button
                 size="icon"
-                variant="outline"
+                variant="secondary"
                 disabled={rate! >= MAX_RATE}
                 onClick={() => {
                   const newRate = Math.min(MAX_RATE, rate! + RATE_STEP);
                   setRate(newRate);
-                  // showToaster(renderRateToaster(newRate));
                   if (isPlaying) resume();
                 }}
-                className="grow border! border-sidebar-accent!"
               >
-                <FastForward strokeWidth={1} className="w-6! h-6!" />
+                <Plus strokeWidth={1} className="w-6! h-6!" />
+              </Button>
+            </ButtonGroup>
+
+            <ButtonGroup className="flex justify-between items-center gap-2 w-full">
+              <Button
+                size="icon"
+                variant="secondary"
+                onClick={() => {
+                  setRate(0.8);
+                  if (isPlaying) resume();
+                }}
+                className="grow"
+              >
+                0.8x
+              </Button>
+              <Button
+                size="icon"
+                variant="secondary"
+                onClick={() => {
+                  setRate(1.0);
+                  if (isPlaying) resume();
+                }}
+                className="grow"
+              >
+                1x
+              </Button>
+              <Button
+                size="icon"
+                variant="secondary"
+                onClick={() => {
+                  setRate(1.2);
+                  if (isPlaying) resume();
+                }}
+                className="grow"
+              >
+                1.2x
               </Button>
             </ButtonGroup>
             <Slider
@@ -143,7 +175,6 @@ export const RateContextMenu = (props: BookControlContextMenuProps) => {
               onValueChange={async (indices: number[]) => {
                 const newRate = indices[0];
                 setRate(newRate);
-                // showToaster(renderRateToaster(newRate));
                 if (isPlaying) resume();
               }}
               min={MIN_RATE}

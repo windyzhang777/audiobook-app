@@ -249,7 +249,7 @@ export const SidePanelLeft = ({ open, onClose, onUpdateBookmark }: SidePanelLeft
             .map((chapter, index) => (
               <Button
                 autoFocus={index === viewChapter?.chapterIndex}
-                variant={index === viewChapter?.chapterIndex ? 'default' : 'outline'}
+                variant={index === viewChapter?.chapterIndex ? 'secondary' : 'ghost'}
                 key={`chapter-${index}`}
                 value={index}
                 onClick={async () => {
@@ -271,7 +271,7 @@ export const SidePanelLeft = ({ open, onClose, onUpdateBookmark }: SidePanelLeft
                   setSelectedBookmark(undefined);
                 }}
                 title={chapter.title}
-                className="w-full justify-start px-2! py-2! h-auto!"
+                className="w-full justify-start px-2! py-2! h-auto! focus:ring-0 focus-visible:ring-0"
               >
                 <span className="w-full text-wrap text-left font-normal!">{chapter.title}</span>
               </Button>
@@ -280,7 +280,7 @@ export const SidePanelLeft = ({ open, onClose, onUpdateBookmark }: SidePanelLeft
           bookmarks?.length > 0 &&
           bookmarks.map((bookmark) => (
             <Button
-              variant={bookmark.index === selectedBookmark ? 'default' : 'outline'}
+              variant={bookmark.index === selectedBookmark ? 'secondary' : 'ghost'}
               key={`bookmark-${bookmark.index}`}
               value={bookmark.index}
               onClick={async () => {
@@ -290,7 +290,7 @@ export const SidePanelLeft = ({ open, onClose, onUpdateBookmark }: SidePanelLeft
                 scrollToView(targetIndex);
               }}
               title={`${bookmark.index + 1}: ${bookmark.text}`}
-              className="w-full justify-start px-2! py-2! h-auto!"
+              className="w-full justify-start px-2! py-2! h-auto! focus:ring-0 focus-visible:ring-0"
             >
               <span className="w-full text-wrap text-left font-normal!">{bookmark.text}</span>
             </Button>
@@ -299,7 +299,7 @@ export const SidePanelLeft = ({ open, onClose, onUpdateBookmark }: SidePanelLeft
           highlights?.length > 0 &&
           highlights.map((highlight) => (
             <Button
-              variant={selectedHighlight && highlight.indices.includes(selectedHighlight) ? 'default' : 'outline'}
+              variant={selectedHighlight && highlight.indices.includes(selectedHighlight) ? 'secondary' : 'ghost'}
               key={`highlight-${highlight.indices[0]}`}
               value={highlight.texts.join('')}
               onClick={async () => {
@@ -310,7 +310,7 @@ export const SidePanelLeft = ({ open, onClose, onUpdateBookmark }: SidePanelLeft
                 scrollToView(targetIndex);
               }}
               title={highlight.texts.join('')}
-              className="w-full justify-start px-2! py-2! h-auto!"
+              className="w-full justify-start px-2! py-2! h-auto! focus:ring-0 focus-visible:ring-0"
             >
               <span className="w-full text-wrap text-left font-normal!">{highlight.texts.join(' ')}</span>
             </Button>
@@ -336,14 +336,14 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
   const { fontSize, setFontSize, lineHeight, setLineHeight, paragraphSpacing, setParagraphSpacing, indent, setIndent, alignment, setAlignment } = useSettingContext();
   const { searchText, searchRes, currentMatch, clickMatch, prevMatch, nextMatch, closeSearch } = useSearchContext();
 
-  const getHighlightedText = (text: string, highlight: string) => {
+  const renderHighlightedText = (text: string, highlight: string) => {
     if (!highlight?.trim()) return text;
     const parts = text.split(new RegExp(`(${escapeRegExp(highlight)})`, 'gi'));
     return (
       <span>
         {parts.map((part, i) =>
           part.toLowerCase() === highlight.toLowerCase() ? (
-            <mark key={i} className={`rounded-md py-1 outline-none bg-highlight`}>
+            <mark key={i} className={`rounded-md py-1 outline-none bg-primary`}>
               {part}
             </mark>
           ) : (
@@ -405,15 +405,15 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
               <div key={res.index} className="relative flex flex-col items-start [&_button]:rounded-none!">
                 <Button
                   autoFocus={viewLine === res.index}
-                  variant={viewLine === res.index ? 'default' : 'outline'}
+                  variant={viewLine === res.index ? 'secondary' : 'ghost'}
                   onClick={async () => {
                     const index = searchRes.findIndex((r) => r === res);
                     await clickMatch(index);
                   }}
-                  className={cn('relative w-full flex-col justify-start items-start! h-auto! gap-2! py-4', lines[res.index]?.startsWith(DELETE_MARKER) && 'hidden')}
+                  className={cn('relative w-full flex-col justify-start items-start! h-auto! gap-2! py-4 focus:ring-0 focus-visible:ring-0', lines[res.index]?.startsWith(DELETE_MARKER) && 'hidden')}
                 >
                   <span>{getChapter(res.index, chapters)?.title}</span>
-                  <span className="w-full text-wrap text-left font-normal!">{getHighlightedText(removeMarker(res.text), searchText)}</span>
+                  <span className="w-full text-wrap text-left font-normal!">{renderHighlightedText(removeMarker(res.text), searchText)}</span>
                 </Button>
 
                 {FEATURES.ENABLE_CAHPTER_EDIT && (

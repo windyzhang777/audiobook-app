@@ -49,7 +49,8 @@ export function useBookSearch(
   const prevMatch = async () => {
     if (searchRes.length === 0) return;
 
-    const prev = (currentMatch - 1 + searchRes.length) % searchRes.length;
+    // const prev = (currentMatch - 1 + searchRes.length) % searchRes.length;
+    const prev = Math.max(0, currentMatch - 1);
     setCurrentMatch(prev);
     await jumpToIndex(searchRes[prev].index);
   };
@@ -57,7 +58,8 @@ export function useBookSearch(
   const nextMatch = async () => {
     if (searchRes.length === 0) return;
 
-    const next = (currentMatch + 1) % searchRes.length;
+    // const next = (currentMatch + 1) % searchRes.length;
+    const next = Math.min(currentMatch + 1, searchRes.length - 1);
     setCurrentMatch(next);
     await jumpToIndex(searchRes[next].index);
   };

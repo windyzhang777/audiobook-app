@@ -1,5 +1,5 @@
 import { api } from '@/services/api';
-import type { ChunkedUploader } from '@/services/ChunkedUploader';
+import type { ChunkedUploader } from '@/services/chunkedUploader';
 import { type UploadProgress } from '@audiobook/shared';
 import { useCallback, useRef, useState } from 'react';
 
