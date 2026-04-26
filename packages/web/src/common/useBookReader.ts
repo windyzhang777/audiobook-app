@@ -22,6 +22,7 @@ export function useBookReader(_id: string | undefined) {
   const [highlights, setHighlights] = useState<NonNullable<Book['highlights']>>([]);
 
   const { toaster, showToaster, hideToaster } = useToaster();
+  const currentLineRef = useRef(currentLine);
 
   const updates: Partial<Book> = useMemo(() => ({ currentLine, lastCompleted, chapters, bookmarks, highlights }), [currentLine, lastCompleted, chapters, bookmarks, highlights]);
   const canUpdate =
@@ -32,6 +33,11 @@ export function useBookReader(_id: string | undefined) {
 
   const isFetchingRef = useRef(false);
   const canFetch = useMemo(() => _id && hasMore, [_id, hasMore]);
+
+  const updateCurrentLine = useCallback((index: number) => {
+    currentLineRef.current = index;
+    setCurrentLine(index);
+  }, []);
 
   const loadBookContent = useCallback(
     async (offset: number = 0, limit: number = PAGE_SIZE) => {
@@ -203,7 +209,7 @@ export function useBookReader(_id: string | undefined) {
 
         setBook(book);
         setTotalLines(book.totalLines);
-        setCurrentLine(book.currentLine || 0);
+        updateCurrentLine(book.currentLine || 0);
         setlastCompleted(book.lastCompleted || '');
         setChapters(book.chapters || []);
         setBookmarks(book.bookmarks || []);
@@ -218,7 +224,7 @@ export function useBookReader(_id: string | undefined) {
     };
 
     loadBook();
-  }, [_id, loadBookContent]);
+  }, [_id, updateCurrentLine, loadBookContent]);
 
   return {
     loading: loading,
@@ -230,7 +236,8 @@ export function useBookReader(_id: string | undefined) {
     loadingMore,
 
     currentLine,
-    setCurrentLine,
+    updateCurrentLine,
+    currentLineRef,
     lastCompleted,
     chapters,
     setChapters,

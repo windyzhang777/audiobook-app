@@ -5,6 +5,7 @@ import { useBookSearch } from '@/common/useBookSearch';
 import { useReaderSettings } from '@/common/useBookSettings';
 import useBookSpeech from '@/common/useBookSpeech';
 import useTimer from '@/common/useTimer';
+import { BookControl } from '@/components/BookReader/BookControl';
 import { BookHeader } from '@/components/BookReader/BookHeader';
 import { BookLine } from '@/components/BookReader/BookLine';
 import { SidePanelLeft, SidePanelRight } from '@/components/BookReader/BookSidePanel';
@@ -13,7 +14,7 @@ import { TextContextMenu } from '@/components/ui/ContextMenu';
 import { BookContext, CommonContext, ContentContext, SearchContext, SettingContext, SpeechContext, ViewLineContext } from '@/config/contexts';
 import { focusBody, getChapterIndex } from '@/utils';
 import { bookTitleWithAuthor, type BookMark } from '@audiobook/shared';
-import { Loader, Loader2 } from 'lucide-react';
+import { ChevronRight, Loader, Loader2 } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Virtuoso } from 'react-virtuoso';
@@ -40,7 +41,8 @@ export const BookReader = () => {
     totalLines,
     loadingMore,
     currentLine,
-    setCurrentLine,
+    updateCurrentLine,
+    currentLineRef,
     lastCompleted,
     chapters,
     setChapters,
@@ -87,7 +89,7 @@ export const BookReader = () => {
     useBookNavigation(lines, loadMoreLines);
 
   // speech hook
-  const { isPlaying, play, pause, resume, stop } = useBookSpeech(_id, lines, lang, totalLines, selectedVoice, rate, currentLine, setCurrentLine, loadMoreLines, onBookCompleted);
+  const { isPlaying, play, pause, resume, stop } = useBookSpeech(_id, lines, lang, totalLines, selectedVoice, rate, currentLine, updateCurrentLine, loadMoreLines, onBookCompleted);
 
   // search hook
   const { searchInputRef, searchText, setSearchText, searchRes, currentMatch, clickMatch, prevMatch, nextMatch, openSearch, closeSearch } = useBookSearch(
@@ -100,8 +102,9 @@ export const BookReader = () => {
 
   const [openPanelLeft, setOpenPanelLeft] = useState(true);
   const [openPanelRight, setOpenPanelRight] = useState(readingMode === 'search' ? searchRes.length > 0 : true);
-
-  const isViewLineVisibleRef = useRef(false);
+  const scrollerRef = useRef<HTMLElement | null>(null);
+  const [isCurrentLineVisible, setIsCurrentLineVisible] = useState(false);
+  const isCurrentLineVisibleRef = useRef(false);
 
   const viewChapter = useMemo(() => {
     if (!chapters) return undefined;
@@ -120,13 +123,16 @@ export const BookReader = () => {
 
   const startFromLine = useCallback(
     (index: number) => {
-      setCurrentLine((prev) => (prev !== index ? index : prev));
-      startTimer(() => updateViewLine(index), 100);
-      closeSearch();
-      ttsScroll();
+      updateCurrentLine(index);
+      updateViewLine(index);
     },
-    [setCurrentLine, startTimer, updateViewLine, closeSearch, ttsScroll],
+    [updateCurrentLine, updateViewLine],
   );
+
+  const ttsFocus = useCallback(() => {
+    closeSearch();
+    ttsScroll();
+  }, [closeSearch, ttsScroll]);
 
   const navigateBack = (replace: boolean = false) => {
     flushUpdate();
@@ -137,20 +143,23 @@ export const BookReader = () => {
     if (isPlaying) {
       pause();
     } else {
-      let startFrom = shouldReadViewLineRef.current ? viewLineRef.current : currentLine;
+      let startFrom = shouldReadViewLineRef.current ? viewLineRef.current : currentLineRef.current;
       startFrom = startFrom >= totalLines ? 0 : startFrom; // if at the end, reset to start from the first line
       startFromLine(startFrom);
+      ttsFocus();
 
       startAnimationFrame(() => scrollToLine(startFrom));
       play(startFrom);
       shouldReadViewLineRef.current = false;
     }
     focusBody();
-  }, [currentLine, startFromLine, isPlaying, startAnimationFrame, scrollToLine, totalLines, viewLineRef, shouldReadViewLineRef, play, pause]);
+  }, [currentLineRef, viewLineRef, startFromLine, ttsFocus, isPlaying, startAnimationFrame, scrollToLine, totalLines, shouldReadViewLineRef, play, pause]);
 
   const handleLineClick = (index: number) => {
     // if (readingMode === 'edit') return;
     startFromLine(index);
+    scrollToLine(currentLine, 'smooth');
+    ttsFocus();
     if (isPlaying) {
       resume(index);
     } else {
@@ -158,16 +167,58 @@ export const BookReader = () => {
     }
   };
 
+  const moveToLine = useCallback(
+    (index: number) => {
+      if (index == currentLineRef.current) return;
+      scrollToLine(index);
+      startFromLine(index);
+      ttsFocus();
+      if (isPlaying) stop();
+    },
+    [currentLineRef, isPlaying, scrollToLine, startFromLine, ttsFocus, stop],
+  );
+
+  const prevLine = useCallback(() => {
+    const index = Math.max(currentLineRef.current - 1, 0);
+    moveToLine(index);
+  }, [currentLineRef, moveToLine]);
+
+  const nextLine = useCallback(() => {
+    const index = Math.min(currentLineRef.current + 1, totalLines - 1);
+    moveToLine(index);
+  }, [currentLineRef, totalLines, moveToLine]);
+
+  const checkLineVisibility = useCallback((index: number) => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+
+    const target = scroller.querySelector(`[data-item-index="${index}"]`);
+    if (!target) return false;
+
+    const scrollerRect = scroller.getBoundingClientRect();
+    const itemRect = target.getBoundingClientRect();
+    const isVisible = itemRect.top >= scrollerRect.top && itemRect.bottom <= scrollerRect.bottom;
+    return isVisible;
+  }, []);
+
   // cleanup on unmount
   useEffect(() => () => stop(), [_id, stop]);
 
   // tts autoscroll
   useEffect(() => {
-    if (isUserScrollRef.current || !isPlaying) return;
+    const isVisible = checkLineVisibility(currentLine);
+    isCurrentLineVisibleRef.current = isVisible || false;
+    if (isCurrentLineVisibleRef.current !== isCurrentLineVisible) {
+      startTimer(() => setIsCurrentLineVisible(isCurrentLineVisibleRef.current));
+    }
+
+    if (isUserScrollRef.current || isVisible || !isPlaying) return;
     scrollToLine(currentLine, 'smooth');
 
-    if (!isSearchJumpingRef.current && currentLine !== viewLine) startTimer(() => updateViewLine(currentLine), 100);
-  }, [isPlaying, currentLine, scrollToLine, startTimer, isSearchJumpingRef, isUserScrollRef, viewLine, updateViewLine]);
+    if (!isSearchJumpingRef.current && currentLine !== viewLineRef.current) {
+      startTimer(() => updateViewLine(currentLine), 100);
+    }
+  }, [checkLineVisibility, isCurrentLineVisible, isPlaying, currentLine, viewLineRef, scrollToLine, startTimer, isSearchJumpingRef, isUserScrollRef, updateViewLine]);
 
   // hijack the browser's default scroll
   useEffect(() => {
@@ -188,27 +239,18 @@ export const BookReader = () => {
 
       if (activeElement === document.body && e.key === 'ArrowDown') {
         e.preventDefault();
-        const index = Math.min(currentLine + 1, totalLines - 1);
-        moveToLine(index);
+        nextLine();
       }
 
       if (activeElement === document.body && e.key === 'ArrowUp') {
         e.preventDefault();
-        const index = Math.max(currentLine - 1, 0);
-        moveToLine(index);
+        prevLine();
       }
-    };
-
-    const moveToLine = (index: number) => {
-      if (index == currentLine) return;
-      scrollToLine(index);
-      startFromLine(index);
-      if (isPlaying) stop();
     };
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [currentLine, closeSearch, isPlaying, scrollToLine, startFromLine, totalLines, handlePlayPause, stop]);
+  }, [closeSearch, handlePlayPause, nextLine, prevLine]);
 
   if (loading) {
     return (
@@ -228,7 +270,20 @@ export const BookReader = () => {
 
   return (
     <CommonContext.Provider
-      value={{ isPlaying, handlePlayPause, readingMode, jumpToIndex, jumpToRead: () => jumpToRead(currentLine), ttsScroll, userScroll, navigateBack, hydrateChapterByIndex, handleLineClick }}
+      value={{
+        isPlaying,
+        handlePlayPause,
+        readingMode,
+        jumpToIndex,
+        jumpToRead: () => jumpToRead(currentLineRef.current),
+        ttsScroll,
+        userScroll,
+        navigateBack,
+        hydrateChapterByIndex,
+        handleLineClick,
+        prevLine,
+        nextLine,
+      }}
     >
       <ViewLineContext.Provider value={{ viewLine, updateViewLine }}>
         <BookContext.Provider
@@ -273,66 +328,78 @@ export const BookReader = () => {
                   availableVoices,
                 }}
               >
-                <SpeechContext.Provider value={{ isPlaying, play, pause, resume: () => resume(currentLine), stop }}>
-                  <div className="min-h-full relative overflow-hidden">
-                    <BookHeader setOpenPanelLeft={setOpenPanelLeft} setOpenPanelRight={setOpenPanelRight} toaster={toaster} />
+                <SpeechContext.Provider value={{ isPlaying, play, pause, resume: () => resume(currentLineRef.current), stop }}>
+                  <div className="h-full relative">
+                    <div className="flex flex-col h-full overflow-hidden">
+                      <BookHeader setOpenPanelLeft={setOpenPanelLeft} setOpenPanelRight={setOpenPanelRight} toaster={toaster} />
 
+                      {/* Start of Virtuoso */}
+                      <Virtuoso
+                        id="book-lines"
+                        ref={virtuosoRef}
+                        scrollerRef={(el) => (scrollerRef.current = el as HTMLElement)}
+                        className="flex-1 leading-loose transition-transform duration-500 ease-in-out"
+                        data={lines}
+                        initialTopMostItemIndex={{ index: 0, align: 'center' }}
+                        increaseViewportBy={200}
+                        endReached={(index) => {
+                          if (!canFetch || isFetchingRef.current || isSearchJumpingRef.current) return;
+                          if (index < lines.length - 1) return;
+                          loadMoreLines(lines.length);
+                        }}
+                        atBottomStateChange={(atBottom) => {
+                          if (!canFetch || isFetchingRef.current || !atBottom) return;
+                          loadMoreLines(lines.length);
+                        }}
+                        // rangeChanged={onRangeChange}
+                        components={{
+                          List: forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ style, children, ...props }, ref) => (
+                            <div
+                              {...props}
+                              ref={ref}
+                              tabIndex={0}
+                              onWheel={userScroll}
+                              onTouchMove={userScroll}
+                              className="outline-none list-none text-left mx-auto w-11/12 md:w-8/12"
+                              style={{ ...style, fontSize, lineHeight, textAlign: alignment, paddingLeft: indent + 'ch', paddingRight: indent + 'ch' }}
+                            >
+                              {children}
+                            </div>
+                          )),
+                          Footer: () => (
+                            <div className="h-20 w-full flex justify-center items-center text-sm text-gray-300">
+                              {loadingMore ? (
+                                <span className="flex justify-center items-center">
+                                  <Loader2 className="animate-spin mr-2" size={16} />
+                                  &nbsp;Loading more...
+                                </span>
+                              ) : !hasMore ? (
+                                <span>You've reach the end</span>
+                              ) : null}
+                            </div>
+                          ),
+                        }}
+                        // Individual Line Item
+                        itemContent={(index, line) => <BookLine index={index} line={line} />}
+                      />
+                      {/* End of Virtuoso */}
+                    </div>
+
+                    <BookControl />
                     <TextContextMenu />
 
-                    {/* Start of Virtuoso */}
-                    <Virtuoso
-                      id="book-lines"
-                      ref={virtuosoRef}
-                      className="fixed top-22 leading-loose transition-transform duration-500 ease-in-out"
-                      style={{ minHeight: 'calc(100vh - 5rem)' }}
-                      data={lines}
-                      initialTopMostItemIndex={{ index: 0, align: 'center' }}
-                      increaseViewportBy={200}
-                      endReached={(index) => {
-                        if (!canFetch || isFetchingRef.current || isSearchJumpingRef.current) return;
-                        if (index < lines.length - 1) return;
-                        loadMoreLines(lines.length);
-                      }}
-                      atBottomStateChange={(atBottom) => {
-                        if (!canFetch || isFetchingRef.current || !atBottom) return;
-                        loadMoreLines(lines.length);
-                      }}
-                      rangeChanged={(range) => {
-                        isViewLineVisibleRef.current = viewLineRef.current >= range.startIndex && viewLineRef.current <= range.endIndex;
-                        // const centerIndex = Math.floor((range.startIndex + range.endIndex) / 2);
-                        // if (isUserScrollRef.current && readingMode !== 'search') setViewLine(centerIndex);
-                      }}
-                      components={{
-                        List: forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ style, children, ...props }, ref) => (
-                          <div
-                            {...props}
-                            ref={ref}
-                            tabIndex={0}
-                            onWheel={userScroll}
-                            onTouchMove={userScroll}
-                            className="top-20 outline-none list-none text-left mx-auto w-11/12 md:w-8/12"
-                            style={{ ...style, fontSize, lineHeight, textAlign: alignment, paddingLeft: indent + 'ch', paddingRight: indent + 'ch' }}
-                          >
-                            {children}
-                          </div>
-                        )),
-                        Footer: () => (
-                          <div className="h-20 w-full flex justify-center items-center text-sm text-gray-300">
-                            {loadingMore ? (
-                              <span className="flex justify-center items-center">
-                                <Loader2 className="animate-spin mr-2" size={16} />
-                                &nbsp;Loading more...
-                              </span>
-                            ) : !hasMore ? (
-                              <span>You've reach the end</span>
-                            ) : null}
-                          </div>
-                        ),
-                      }}
-                      // Individual Line Item
-                      itemContent={(index, line) => <BookLine index={index} line={line} />}
-                    />
-                    {/* End of Virtuoso */}
+                    {/* Indicator Message */}
+                    {!isCurrentLineVisible && (
+                      <Button
+                        variant="ghost"
+                        id="indicator-message"
+                        onClick={() => jumpToRead(currentLineRef.current)}
+                        className="z-20 w-[40%] p-2 truncate absolute top-25 left-1/2 -translate-x-1/2 px-4 py-1 text-sm justify-start bg-highlight"
+                      >
+                        <ChevronRight size={12} />
+                        <span className="w-full truncate">{lines[currentLine]}</span>
+                      </Button>
+                    )}
 
                     {/* Left Panel */}
                     <SidePanelLeft

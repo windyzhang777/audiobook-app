@@ -4,7 +4,7 @@ import { Slider } from '@/components/ui/slider';
 import { useBookContext, useCommonContext, useSearchContext, useViewLineContext } from '@/config/contexts';
 import { FEATURES } from '@/config/features';
 import { bookTitleWithAuthor } from '@audiobook/shared';
-import { ArrowBigDown, ArrowBigUp, LibraryBig, ListEnd, ListStart, MapPin, PanelLeft, Pause, Play, Search, Settings, X } from 'lucide-react';
+import { ArrowBigDown, ArrowBigUp, LibraryBig, ListEnd, ListStart, PanelLeft, Search, Settings, X } from 'lucide-react';
 import { type SetStateAction } from 'react';
 
 interface BookHeaderProps {
@@ -15,13 +15,13 @@ interface BookHeaderProps {
 
 export const BookHeader = ({ setOpenPanelLeft, setOpenPanelRight, toaster }: BookHeaderProps) => {
   const { book, currentLine, chapters, viewChapter, totalLines } = useBookContext();
-  const { isPlaying, handlePlayPause, readingMode, jumpToIndex, userScroll, jumpToRead, navigateBack } = useCommonContext();
+  const { isPlaying, readingMode, jumpToIndex, userScroll, navigateBack } = useCommonContext();
   const { viewLine } = useViewLineContext();
   const { searchInputRef, searchText, setSearchText, openSearch, closeSearch, prevMatch, nextMatch } = useSearchContext();
   if (!book || currentLine === undefined) return null;
 
   return (
-    <header className="fixed z-10 top-0 left-0 right-0">
+    <header className="z-10">
       <nav id="controls" className="relative px-4 pt-0 pb-10 md:py-4">
         {/* Left Panel Group */}
         <div id="panel-left" title="Bookmars & Chapters" className="flex items-center gap-2">
@@ -93,11 +93,6 @@ export const BookHeader = ({ setOpenPanelLeft, setOpenPanelRight, toaster }: Boo
               <ArrowBigDown size={16} />
             </Button>
           )}
-
-          {/* Jump to Read */}
-          <Button size="icon" variant="ghost" id="jump-to-read" title="Jump To Read" onClick={jumpToRead}>
-            <MapPin />
-          </Button>
         </div>
 
         {/* Back to Books */}
@@ -114,14 +109,11 @@ export const BookHeader = ({ setOpenPanelLeft, setOpenPanelRight, toaster }: Boo
           </Button>
         </div>
 
-        {/* Play/Pause */}
+        {/* Book Title */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/12 md:-translate-y-1/2 flex justify-center items-center w-[clamp(40px,80%,80%)] md:w-[clamp(40px,60%,30%)] lg:w-[40%]">
-          <Button variant="ghost" id={isPlaying ? 'pause' : 'play'} onClick={handlePlayPause} title={isPlaying ? 'Pause' : 'Play'} className="w-full truncate justify-center">
-            {isPlaying ? <Pause /> : <Play className="text-green-600" />}
-            <span title={bookTitleWithAuthor(book)} className="w-auto truncate">
-              {bookTitleWithAuthor(book)}
-            </span>
-          </Button>
+          <span title={bookTitleWithAuthor(book)} className="w-auto truncate font-semibold">
+            {bookTitleWithAuthor(book)}
+          </span>
         </div>
 
         {/* Right Panel Group */}

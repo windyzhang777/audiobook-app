@@ -17,6 +17,8 @@ interface ICommonContext {
   // loadMoreLines: (offset?: number, limit?: number) => Promise<void>;
   hydrateChapterByIndex: (chapterIndex: number) => Promise<Book | undefined>;
   handleLineClick: (index: number) => void;
+  prevLine: () => void;
+  nextLine: () => void;
 }
 const defaultCommonContext: ICommonContext = {
   isPlaying: false,
@@ -32,6 +34,8 @@ const defaultCommonContext: ICommonContext = {
   // loadMoreLines: () => Promise.resolve(),
   hydrateChapterByIndex: () => Promise.resolve(undefined),
   handleLineClick: () => {},
+  prevLine: () => {},
+  nextLine: () => {},
 };
 export const CommonContext = createContext<ICommonContext>(defaultCommonContext);
 export const useCommonContext = () => {
@@ -54,6 +58,8 @@ export const useCommonContext = () => {
     // loadMoreLines: commonContext.loadMoreLines,
     hydrateChapterByIndex: commonContext.hydrateChapterByIndex,
     handleLineClick: commonContext.handleLineClick,
+    prevLine: commonContext.prevLine,
+    nextLine: commonContext.nextLine,
   };
 };
 

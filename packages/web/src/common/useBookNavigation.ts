@@ -17,7 +17,6 @@ export default function useBookNavigation(lines: string[], loadMoreLines: (offse
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const isSearchJumpingRef = useRef(false);
   const shouldReadViewLineRef = useRef(false);
-
   const isUserScrollRef = useRef(false);
 
   const updateViewLine = useCallback((index: number) => {
@@ -41,9 +40,12 @@ export default function useBookNavigation(lines: string[], loadMoreLines: (offse
     startTimer(() => (isSearchJumpingRef.current = false), 300);
   }, [startTimer]);
 
-  const scrollToLine = useCallback((index: number, behavior: LocationOptions['behavior'] = 'auto') => {
-    virtuosoRef.current?.scrollToIndex({ index, align: 'center', behavior, offset: 120 });
-  }, []);
+  const scrollToLine = useCallback(
+    (index: number, behavior: LocationOptions['behavior'] = 'auto') => {
+      startTimer(() => virtuosoRef.current?.scrollToIndex({ index, align: 'start', behavior }), 200);
+    },
+    [startTimer],
+  );
 
   const jumpToRead = (index: number) => {
     scrollToLine(index);

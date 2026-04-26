@@ -1,12 +1,11 @@
 import { useSaveToLocal } from '@/common/useSaveToLocal';
 import useScroll from '@/common/useScroll';
-import useToaster from '@/common/useToaster';
 import { Button } from '@/components//ui/button';
 import { useTheme } from '@/components/theme-provider';
 import { ButtonGroup } from '@/components/ui/button-group';
 import { SidePanel } from '@/components/ui/SidePanel';
 import { Slider } from '@/components/ui/slider';
-import { useBookContext, useCommonContext, useContentContext, useSearchContext, useSettingContext, useSpeechContext, useViewLineContext } from '@/config/contexts';
+import { useBookContext, useCommonContext, useContentContext, useSearchContext, useSettingContext, useViewLineContext } from '@/config/contexts';
 import { FEATURES } from '@/config/features';
 import { cn } from '@/lib/utils';
 import { getChapter } from '@/utils';
@@ -24,16 +23,12 @@ import {
   MAX_INDENT,
   MAX_LINE_HEIGHT,
   MAX_PARAGRAPH_SPACING,
-  MAX_RATE,
   MIN_FONT_SIZE,
   MIN_INDENT,
   MIN_LINE_HEIGHT,
   MIN_PARAGRAPH_SPACING,
-  MIN_RATE,
   PARAGRAPH_SPACING_DEFAULT,
   PARAGRAPH_SPACING_STEP,
-  RATE_DEFAULT,
-  RATE_STEP,
   removeMarker,
   type BookMark,
 } from '@audiobook/shared';
@@ -44,8 +39,6 @@ import {
   BookmarkX,
   CaseSensitive,
   Eraser,
-  FastForward,
-  Headphones,
   Highlighter,
   ListChevronsDownUp,
   ListChevronsUpDown,
@@ -55,7 +48,6 @@ import {
   Minus,
   Moon,
   Plus,
-  Rewind,
   Rows2,
   Rows4,
   Save,
@@ -68,7 +60,6 @@ import {
   TextAlignStart,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { renderRateToaster } from '../toaster';
 
 interface BookSidePanelProps {
   open: boolean;
@@ -338,29 +329,11 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
   };
 
   const { theme, setTheme } = useTheme();
-  const { toaster, showToaster } = useToaster();
   const { chapters, toggleChapter, deleteLine } = useBookContext();
   const { lines } = useContentContext();
   const { readingMode } = useCommonContext();
   const { viewLine } = useViewLineContext();
-  const {
-    fontSize,
-    setFontSize,
-    rate,
-    setRate,
-    setVoice,
-    selectedVoice,
-    lineHeight,
-    setLineHeight,
-    paragraphSpacing,
-    setParagraphSpacing,
-    indent,
-    setIndent,
-    alignment,
-    setAlignment,
-    availableVoices,
-  } = useSettingContext();
-  const { isPlaying, resume } = useSpeechContext();
+  const { fontSize, setFontSize, lineHeight, setLineHeight, paragraphSpacing, setParagraphSpacing, indent, setIndent, alignment, setAlignment } = useSettingContext();
   const { searchText, searchRes, currentMatch, clickMatch, prevMatch, nextMatch, closeSearch } = useSearchContext();
 
   const getHighlightedText = (text: string, highlight: string) => {
@@ -487,41 +460,29 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
         <Button size="icon" variant={index === 0 ? 'default' : 'outline'} onClick={() => selectTab(0)}>
           <CaseSensitive strokeWidth={1.5} className="w-5! h-5!" />
         </Button>
-        <Button size="icon" variant={index === 1 ? 'default' : 'outline'} onClick={() => selectTab(1)}>
-          <Headphones />
-        </Button>
-
-        {/* Indicator Message */}
-        {toaster ? (
-          <div
-            id="indicator-message"
-            className="absolute top-1/2 left-0 -translate-y-1/2 px-4 py-1 text-sm rounded-sm flex justify-center items-center gap-2 bg-highlight z-50 pointer-events-none transition-opacity duration-300"
-          >
-            {toaster}
-          </div>
-        ) : null}
       </div>
 
-      {index === 0 && (
-        <div className="flex flex-col gap-4">
-          {/* Mode */}
-          <div className="flex flex-col gap-2">
-            <div className="uppercase text-xs">mood</div>
-            <ButtonGroup className="flex-wrap row w-full gap-2">
-              <Button size="icon" variant={theme === 'light' ? 'default' : 'outline'} onClick={() => setTheme('light')} className="grow border! border-sidebar-accent!">
-                <Sun strokeWidth={1.5} className="w-5! h-5!" />
-              </Button>
-              <Button size="icon" variant={theme === 'dark' ? 'default' : 'outline'} onClick={() => setTheme('dark')} className="grow border! border-sidebar-accent!">
-                <Moon strokeWidth={1.5} className="w-5! h-5!" />
-              </Button>
-            </ButtonGroup>
-            <div className="p-2 bg-highlight">Switch between different modes to enhance your reading experience</div>
-          </div>
+      <div className="no-scrollbar overflow-y-auto overflow-x-hidden flex flex-col items-start [&_button]:rounded-none!">
+        {index === 0 && (
+          <div className="flex flex-col gap-4">
+            {/* Mode */}
+            <div className="flex flex-col gap-2">
+              <div className="uppercase text-xs">mood</div>
+              <ButtonGroup className="flex-wrap w-full gap-2">
+                <Button size="icon" variant={theme === 'light' ? 'default' : 'outline'} onClick={() => setTheme('light')} className="grow border! border-sidebar-accent!">
+                  <Sun strokeWidth={1.5} className="w-5! h-5!" />
+                </Button>
+                <Button size="icon" variant={theme === 'dark' ? 'default' : 'outline'} onClick={() => setTheme('dark')} className="grow border! border-sidebar-accent!">
+                  <Moon strokeWidth={1.5} className="w-5! h-5!" />
+                </Button>
+              </ButtonGroup>
+              <div className="p-2 bg-highlight">Switch between different modes to enhance your reading experience</div>
+            </div>
 
-          {/* Page View */}
-          {/* <div className="flex flex-col gap-2">
+            {/* Page View */}
+            {/* <div className="flex flex-col gap-2">
             <div className="uppercase text-xs">page view</div>
-            <ButtonGroup className="flex-wrap row w-full gap-2">
+            <ButtonGroup className="flex-wrap w-full gap-2">
               <Button size="icon" variant="outline" onClick={() => setFontSize((prev) => pPrev - 1)} className="grow border! border-sidebar-accent!">
                 <RectangleVertical strokeWidth={1.5} className="w-5! h-5!" />
               </Button>
@@ -531,226 +492,156 @@ export const SidePanelRight = ({ open, onClose }: BookSidePanelProps) => {
             </ButtonGroup>
           </div> */}
 
-          {/* Font Size */}
-          <div className="flex flex-col gap-2">
-            <div className="uppercase text-xs">font size</div>
-            <ButtonGroup className="flex-wrap row w-full gap-2">
-              <Button
-                size="icon"
-                variant="outline"
-                disabled={fontSize! <= MIN_FONT_SIZE}
-                onClick={() => setFontSize((prev) => Math.max(MIN_FONT_SIZE, prev! - FONT_SIZE_STEP))}
-                className="grow border! border-sidebar-accent!"
-              >
-                <AArrowDown strokeWidth={1} className="w-6! h-6!" />
-              </Button>
-              <Button
-                size="icon"
-                variant="outline"
-                disabled={fontSize! >= MAX_FONT_SIZE}
-                onClick={() => setFontSize((prev) => Math.min(MAX_FONT_SIZE, prev! + FONT_SIZE_STEP))}
-                className="grow border! border-sidebar-accent!"
-              >
-                <AArrowUp strokeWidth={1} className="w-6! h-6!" />
-              </Button>
-            </ButtonGroup>
-            <Slider
-              value={[fontSize || FONT_SIZE_DEFAULT]}
-              onValueChange={async (indices: number[]) => setFontSize(indices[0])}
-              min={MIN_FONT_SIZE}
-              max={MAX_FONT_SIZE}
-              step={FONT_SIZE_STEP}
-              className="mt-2"
-            />
-          </div>
-
-          {/* Line Height */}
-          <div className="flex flex-col gap-2">
-            <div className="uppercase text-xs">line height</div>
-            <ButtonGroup className="flex-wrap row w-full gap-2">
-              <Button
-                size="icon"
-                variant="outline"
-                disabled={lineHeight! <= MIN_LINE_HEIGHT}
-                onClick={() => setLineHeight((prev) => Math.max(MIN_LINE_HEIGHT, prev! - LINE_HEIGHT_STEP))}
-                className="grow border! border-sidebar-accent!"
-              >
-                <ListChevronsDownUp strokeWidth={1.5} className="w-5! h-5!" />
-              </Button>
-              <Button
-                size="icon"
-                variant="outline"
-                disabled={lineHeight! >= MAX_LINE_HEIGHT}
-                onClick={() => setLineHeight((prev) => Math.min(MAX_LINE_HEIGHT, prev! + LINE_HEIGHT_STEP))}
-                className="grow border! border-sidebar-accent!"
-              >
-                <ListChevronsUpDown strokeWidth={1.5} className="w-5! h-5!" />
-              </Button>
-            </ButtonGroup>
-            <Slider
-              value={[lineHeight || LINE_HEIGHT_DEFAULT]}
-              onValueChange={async (indices: number[]) => setLineHeight(indices[0])}
-              min={MIN_LINE_HEIGHT}
-              max={MAX_LINE_HEIGHT}
-              step={LINE_HEIGHT_STEP}
-              className="mt-2"
-            />
-          </div>
-
-          {/* Paragraph Spacing */}
-          <div className="flex flex-col gap-2">
-            <div className="uppercase text-xs">paragraph spacing</div>
-            <ButtonGroup className="flex-wrap row w-full gap-2">
-              <Button
-                size="icon"
-                variant="outline"
-                disabled={paragraphSpacing! <= MIN_PARAGRAPH_SPACING}
-                onClick={() => setParagraphSpacing((prev) => Math.max(MIN_PARAGRAPH_SPACING, prev! - PARAGRAPH_SPACING_STEP))}
-                className="grow border! border-sidebar-accent!"
-              >
-                <Rows4 strokeWidth={1.5} className="w-5! h-5!" />
-              </Button>
-              <Button
-                size="icon"
-                variant="outline"
-                disabled={paragraphSpacing! >= MAX_PARAGRAPH_SPACING}
-                onClick={() => setParagraphSpacing((prev) => Math.min(MAX_PARAGRAPH_SPACING, prev! + PARAGRAPH_SPACING_STEP))}
-                className="grow border! border-sidebar-accent!"
-              >
-                <Rows2 strokeWidth={1.5} className="w-5! h-5!" />
-              </Button>
-            </ButtonGroup>
-            <Slider
-              value={[paragraphSpacing || PARAGRAPH_SPACING_DEFAULT]}
-              onValueChange={async (indices: number[]) => setParagraphSpacing(indices[0])}
-              min={MIN_PARAGRAPH_SPACING}
-              max={MAX_PARAGRAPH_SPACING}
-              step={PARAGRAPH_SPACING_STEP}
-              className="mt-2"
-            />
-          </div>
-
-          {/* Indent */}
-          <div className="flex flex-col gap-2">
-            <div className="uppercase text-xs">indent</div>
-            <ButtonGroup className="flex-wrap row w-full gap-2">
-              <Button
-                size="icon"
-                variant="outline"
-                disabled={indent! <= MIN_INDENT}
-                onClick={() => setIndent((prev) => Math.max(MIN_INDENT, prev! - INDENT_STEP))}
-                className="grow border! border-sidebar-accent!"
-              >
-                <ListIndentDecrease strokeWidth={1.5} className="w-5! h-5!" />
-              </Button>
-              <Button
-                size="icon"
-                variant="outline"
-                disabled={indent! >= MAX_INDENT}
-                onClick={() => setIndent((prev) => Math.min(MAX_INDENT, prev! + INDENT_STEP))}
-                className="grow border! border-sidebar-accent!"
-              >
-                <ListIndentIncrease strokeWidth={1.5} className="w-5! h-5!" />
-              </Button>
-            </ButtonGroup>
-            <Slider value={[indent ?? INDENT_DEFAULT]} onValueChange={async (indices: number[]) => setIndent(indices[0])} min={MIN_INDENT} max={MAX_INDENT} step={INDENT_STEP} className="mt-2" />
-          </div>
-
-          {/* Alignment */}
-          <div className="flex flex-col gap-2">
-            <div className="uppercase text-xs">alignment</div>
-            <ButtonGroup className="flex-wrap row w-full">
-              <Button size="icon" variant={alignment === 'left' ? 'default' : 'outline'} onClick={() => setAlignment('left')} className="grow border! border-sidebar-accent! rounded-r-none!">
-                <TextAlignStart strokeWidth={1.5} className="w-5! h-5!" />
-              </Button>
-              <Button
-                size="icon"
-                variant={alignment === 'center' ? 'default' : 'outline'}
-                onClick={() => setAlignment('center')}
-                className="grow border! border-l-0! border-r-0! border-sidebar-accent! rounded-none!"
-              >
-                <TextAlignCenter strokeWidth={1.5} className="w-5! h-5!" />
-              </Button>
-              <Button size="icon" variant={alignment === 'right' ? 'default' : 'outline'} onClick={() => setAlignment('right')} className="grow border! border-sidebar-accent! rounded-l-none!">
-                <TextAlignEnd strokeWidth={1.5} className="w-5! h-5!" />
-              </Button>
-            </ButtonGroup>
-          </div>
-
-          <div className="grow" />
-        </div>
-      )}
-      {index === 1 && (
-        <div className="flex flex-col gap-4">
-          {/* Voice */}
-          <div className="flex flex-col gap-2">
-            <div className="uppercase text-xs">voice</div>
-            <ButtonGroup className="w-full flex flex-col gap-1">
-              {availableVoices.map((option) => (
+            {/* Font Size */}
+            <div className="flex flex-col gap-2">
+              <div className="uppercase text-xs">font size</div>
+              <ButtonGroup className="flex-wrap w-full gap-2">
                 <Button
-                  key={option.id}
                   size="icon"
-                  variant={selectedVoice.id === option.id ? 'default' : 'outline'}
-                  onClick={() => setVoice(option.id)}
-                  className="w-full border! border-sidebar-accent! truncate"
+                  variant="outline"
+                  disabled={fontSize! <= MIN_FONT_SIZE}
+                  onClick={() => setFontSize((prev) => Math.max(MIN_FONT_SIZE, prev! - FONT_SIZE_STEP))}
+                  className="grow border! border-sidebar-accent!"
                 >
-                  <span className="w-full truncate">{option.displayName}</span>
+                  <AArrowDown strokeWidth={1} className="w-6! h-6!" />
                 </Button>
-              ))}
-            </ButtonGroup>
-          </div>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  disabled={fontSize! >= MAX_FONT_SIZE}
+                  onClick={() => setFontSize((prev) => Math.min(MAX_FONT_SIZE, prev! + FONT_SIZE_STEP))}
+                  className="grow border! border-sidebar-accent!"
+                >
+                  <AArrowUp strokeWidth={1} className="w-6! h-6!" />
+                </Button>
+              </ButtonGroup>
+              <Slider
+                value={[fontSize || FONT_SIZE_DEFAULT]}
+                onValueChange={async (indices: number[]) => setFontSize(indices[0])}
+                min={MIN_FONT_SIZE}
+                max={MAX_FONT_SIZE}
+                step={FONT_SIZE_STEP}
+                className="mt-2"
+              />
+            </div>
 
-          {/* Rate */}
-          <div className="flex flex-col gap-2">
-            <div className="uppercase text-xs">speech rate</div>
-            <ButtonGroup className="flex-wrap row w-full gap-2">
-              <Button
-                size="icon"
-                variant="outline"
-                disabled={rate! <= MIN_RATE}
-                onClick={() => {
-                  const newRate = Math.max(MIN_RATE, rate! - RATE_STEP);
-                  setRate(newRate);
-                  showToaster(renderRateToaster(newRate));
-                  if (isPlaying) resume();
-                }}
-                className="grow border! border-sidebar-accent!"
-              >
-                <Rewind strokeWidth={1} className="w-6! h-6!" />
-              </Button>
-              <Button
-                size="icon"
-                variant="outline"
-                disabled={rate! >= MAX_RATE}
-                onClick={() => {
-                  const newRate = Math.min(MAX_RATE, rate! + RATE_STEP);
-                  setRate(newRate);
-                  showToaster(renderRateToaster(newRate));
-                  if (isPlaying) resume();
-                }}
-                className="grow border! border-sidebar-accent!"
-              >
-                <FastForward strokeWidth={1} className="w-6! h-6!" />
-              </Button>
-            </ButtonGroup>
-            <Slider
-              value={[rate || RATE_DEFAULT]}
-              onValueChange={async (indices: number[]) => {
-                const newRate = indices[0];
-                setRate(newRate);
-                showToaster(renderRateToaster(newRate));
-                if (isPlaying) resume();
-              }}
-              min={MIN_RATE}
-              max={MAX_RATE}
-              step={RATE_STEP}
-              className="mt-2"
-            />
-          </div>
+            {/* Line Height */}
+            <div className="flex flex-col gap-2">
+              <div className="uppercase text-xs">line height</div>
+              <ButtonGroup className="flex-wrap w-full gap-2">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  disabled={lineHeight! <= MIN_LINE_HEIGHT}
+                  onClick={() => setLineHeight((prev) => Math.max(MIN_LINE_HEIGHT, prev! - LINE_HEIGHT_STEP))}
+                  className="grow border! border-sidebar-accent!"
+                >
+                  <ListChevronsDownUp strokeWidth={1.5} className="w-5! h-5!" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  disabled={lineHeight! >= MAX_LINE_HEIGHT}
+                  onClick={() => setLineHeight((prev) => Math.min(MAX_LINE_HEIGHT, prev! + LINE_HEIGHT_STEP))}
+                  className="grow border! border-sidebar-accent!"
+                >
+                  <ListChevronsUpDown strokeWidth={1.5} className="w-5! h-5!" />
+                </Button>
+              </ButtonGroup>
+              <Slider
+                value={[lineHeight || LINE_HEIGHT_DEFAULT]}
+                onValueChange={async (indices: number[]) => setLineHeight(indices[0])}
+                min={MIN_LINE_HEIGHT}
+                max={MAX_LINE_HEIGHT}
+                step={LINE_HEIGHT_STEP}
+                className="mt-2"
+              />
+            </div>
 
-          <div className="grow" />
-        </div>
-      )}
+            {/* Paragraph Spacing */}
+            <div className="flex flex-col gap-2">
+              <div className="uppercase text-xs">paragraph spacing</div>
+              <ButtonGroup className="flex-wrap w-full gap-2">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  disabled={paragraphSpacing! <= MIN_PARAGRAPH_SPACING}
+                  onClick={() => setParagraphSpacing((prev) => Math.max(MIN_PARAGRAPH_SPACING, prev! - PARAGRAPH_SPACING_STEP))}
+                  className="grow border! border-sidebar-accent!"
+                >
+                  <Rows4 strokeWidth={1.5} className="w-5! h-5!" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  disabled={paragraphSpacing! >= MAX_PARAGRAPH_SPACING}
+                  onClick={() => setParagraphSpacing((prev) => Math.min(MAX_PARAGRAPH_SPACING, prev! + PARAGRAPH_SPACING_STEP))}
+                  className="grow border! border-sidebar-accent!"
+                >
+                  <Rows2 strokeWidth={1.5} className="w-5! h-5!" />
+                </Button>
+              </ButtonGroup>
+              <Slider
+                value={[paragraphSpacing || PARAGRAPH_SPACING_DEFAULT]}
+                onValueChange={async (indices: number[]) => setParagraphSpacing(indices[0])}
+                min={MIN_PARAGRAPH_SPACING}
+                max={MAX_PARAGRAPH_SPACING}
+                step={PARAGRAPH_SPACING_STEP}
+                className="mt-2"
+              />
+            </div>
+
+            {/* Indent */}
+            <div className="flex flex-col gap-2">
+              <div className="uppercase text-xs">indent</div>
+              <ButtonGroup className="flex-wrap w-full gap-2">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  disabled={indent! <= MIN_INDENT}
+                  onClick={() => setIndent((prev) => Math.max(MIN_INDENT, prev! - INDENT_STEP))}
+                  className="grow border! border-sidebar-accent!"
+                >
+                  <ListIndentDecrease strokeWidth={1.5} className="w-5! h-5!" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  disabled={indent! >= MAX_INDENT}
+                  onClick={() => setIndent((prev) => Math.min(MAX_INDENT, prev! + INDENT_STEP))}
+                  className="grow border! border-sidebar-accent!"
+                >
+                  <ListIndentIncrease strokeWidth={1.5} className="w-5! h-5!" />
+                </Button>
+              </ButtonGroup>
+              <Slider value={[indent ?? INDENT_DEFAULT]} onValueChange={async (indices: number[]) => setIndent(indices[0])} min={MIN_INDENT} max={MAX_INDENT} step={INDENT_STEP} className="mt-2" />
+            </div>
+
+            {/* Alignment */}
+            <div className="flex flex-col gap-2">
+              <div className="uppercase text-xs">alignment</div>
+              <ButtonGroup className="flex-wrap w-full">
+                <Button size="icon" variant={alignment === 'left' ? 'default' : 'outline'} onClick={() => setAlignment('left')} className="grow border! border-sidebar-accent! rounded-r-none!">
+                  <TextAlignStart strokeWidth={1.5} className="w-5! h-5!" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant={alignment === 'center' ? 'default' : 'outline'}
+                  onClick={() => setAlignment('center')}
+                  className="grow border! border-l-0! border-r-0! border-sidebar-accent! rounded-none!"
+                >
+                  <TextAlignCenter strokeWidth={1.5} className="w-5! h-5!" />
+                </Button>
+                <Button size="icon" variant={alignment === 'right' ? 'default' : 'outline'} onClick={() => setAlignment('right')} className="grow border! border-sidebar-accent! rounded-l-none!">
+                  <TextAlignEnd strokeWidth={1.5} className="w-5! h-5!" />
+                </Button>
+              </ButtonGroup>
+            </div>
+
+            <div className="grow" />
+          </div>
+        )}
+      </div>
     </SidePanel>
   );
 };
