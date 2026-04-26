@@ -8,11 +8,12 @@ import { UploadController } from './controllers/uploadController';
 import { BookRepository } from './repositories/book';
 import { bookRoutes } from './routes/bookRoutes';
 import { uploadRoutes } from './routes/uploadRoutes';
-import { AudiobookService } from './services/AudiobookService';
+import { AudiobookService } from './services/audiobookService';
 import { BookService } from './services/bookService';
-import { ScraperService } from './services/ScraperService';
+import { CoverService } from './services/coverService';
+import { ScraperService } from './services/scraperService';
 import { TextProcessorService } from './services/textProcessorService';
-import { TTSGoogle } from './services/TTSService';
+import { TTSGoogle } from './services/ttsService';
 import { UploadService } from './services/uploadService';
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
@@ -31,10 +32,11 @@ app.use('/uploads', express.static(uploadsDir));
 // Instances
 const bookRepository = new BookRepository();
 const textProcessorService = new TextProcessorService();
+const coverService = new CoverService();
 const scraperService = new ScraperService();
 const ttsService = new TTSGoogle();
 const audiobookService = new AudiobookService(bookRepository, ttsService);
-const bookService = new BookService(bookRepository, textProcessorService, scraperService);
+const bookService = new BookService(bookRepository, textProcessorService, scraperService, coverService);
 const bookController = new BookController(bookService, audiobookService);
 const uploadService = new UploadService();
 const uploadController = new UploadController(uploadService, bookService);

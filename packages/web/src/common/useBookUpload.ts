@@ -20,7 +20,12 @@ export function useBookUpload(onComplete?: () => void) {
   const [error, setError] = useState<string>('');
 
   const uploadStarted = useRef(false);
-  const uploaderRef = useRef<ChunkedUploader | { cancel: () => void } | null>(null);
+  const uploaderRef = useRef<ChunkedUploader | null>(null);
+
+  const resetUpload = useCallback(() => {
+    setUploadingFile(undefined);
+    uploadStarted.current = false;
+  }, []);
 
   const startUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -32,8 +37,10 @@ export function useBookUpload(onComplete?: () => void) {
       setStatus('uploading');
 
       try {
-        const { book, uploader } = await api.upload.smartUpload(file, {
-          onProgress: (p) => setProgress(p),
+        const { book, uploader } = await api.upload.upload(file, {
+          onProgress: (p) => {
+            setProgress(p);
+          },
           onError: (err) => {
             setStatus('error');
             setError(err.message);
@@ -45,7 +52,7 @@ export function useBookUpload(onComplete?: () => void) {
         setStatus('completed');
         setTimeout(() => {
           onComplete?.();
-          setUploadingFile(undefined);
+          resetUpload();
         }, 1500);
       } catch (error) {
         setStatus('error');
@@ -54,7 +61,7 @@ export function useBookUpload(onComplete?: () => void) {
         e.target.value = '';
       }
     },
-    [onComplete],
+    [onComplete, resetUpload],
   );
 
   const cancleUpload = useCallback(() => {
@@ -62,8 +69,8 @@ export function useBookUpload(onComplete?: () => void) {
       uploaderRef.current.cancel();
     }
     setStatus('cancelled');
-    setUploadingFile(undefined);
-  }, []);
+    resetUpload();
+  }, [resetUpload]);
 
   return { uploadingFile, status, progress, error, startUpload, cancleUpload };
 }

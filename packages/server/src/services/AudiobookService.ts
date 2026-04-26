@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { uploadsDir } from '../index';
 import { BookRepository } from '../repositories/book';
-import { TTSGoogle } from './TTSService';
+import { TTSGoogle } from './ttsService';
 
 export class AudiobookService {
   private uploadsDir = uploadsDir;
@@ -18,7 +18,7 @@ export class AudiobookService {
    * Generates audio for a specific line of a book.
    * Best for "On-Demand" streaming to save on Google Cloud costs.
    */
-  async getAudioForLine(bookId: string, lineIndex: number): Promise<Buffer> {
+  getAudioForLine = async (bookId: string, lineIndex: number): Promise<Buffer> => {
     const content = await this.bookRepository.getContent(bookId, 0, ALL_LINES);
     if (!content || !content.lines[lineIndex]) {
       throw new Error('Line not found');
@@ -29,12 +29,12 @@ export class AudiobookService {
     const audioBuffer = await this.ttsService.synthesize(text, content.lang);
 
     return audioBuffer as Buffer;
-  }
+  };
 
   /**
    * Pre-generates the entire audiobook (Long running task)
    */
-  async processFullAudiobook(bookId: string) {
+  processFullAudiobook = async (bookId: string) => {
     const content = await this.bookRepository.getContent(bookId, 0, ALL_LINES);
     if (!content) throw new Error('Book content not found');
 
@@ -69,5 +69,5 @@ export class AudiobookService {
 
       throw new Error(`Synthesis failed: ${(error as Error).message}`);
     }
-  }
+  };
 }

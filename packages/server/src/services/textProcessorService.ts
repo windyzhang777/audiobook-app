@@ -1,6 +1,5 @@
 import { Book, BookContent, Chapter, CHAPTER_MARKER, fixEncodingTxt, IMAGE_MARKER, localeByLang } from '@audiobook/shared';
 import { EPub } from 'epub2';
-import { TocElement } from 'epub2/lib/epub/const';
 import { franc } from 'franc';
 import fs from 'fs';
 import path from 'path';
@@ -11,12 +10,7 @@ export interface ProcessedBook {
   lang: BookContent['lang'];
   lines: BookContent['lines'];
   chapters: Book['chapters'];
-  coverPath?: Book['coverPath'];
   extractedImages?: Book['extractedImages'];
-}
-
-interface EpubManifest extends TocElement {
-  properties: string;
 }
 
 export class TextProcessorService {
@@ -38,6 +32,29 @@ export class TextProcessorService {
 
     const lang = franc(detectionText, { minLength: 20 });
     return localeByLang[lang] || localeByLang.default; // default to English
+  }
+
+  private async splitTextIntoParagraphs(text: string, lang: string = localeByLang.default): Promise<string[]> {
+    try {
+      const lines: string[] = [];
+      const paragraphs = text.split(/\n{2,}/);
+
+      for (const para of paragraphs) {
+        const trimmed = para.trim();
+        if (!trimmed) continue;
+
+        // Preserve image markers as-is
+        if (trimmed.startsWith(IMAGE_MARKER)) {
+          lines.push(trimmed);
+          continue;
+        }
+        lines.push(trimmed);
+      }
+
+      return lines;
+    } catch (error) {
+      return this.splitTextIntoLines(text, lang);
+    }
   }
 
   private async splitTextIntoLines(text: string, lang: string = localeByLang.default): Promise<string[]> {
@@ -79,21 +96,20 @@ export class TextProcessorService {
 
   async processBookText(text: string) {
     const lang = this.detectLanguage(text);
-    const lines = await this.splitTextIntoLines(text, lang);
+    const lines = await this.splitTextIntoParagraphs(text, lang);
     return { lang, lines };
   }
 
   async processBookData(bookId: string, title: string, filePath: string, fileType: string): Promise<ProcessedBook> {
-    if (fileType === 'txt') {
-      return this.processTxt(title, filePath);
-    }
-
-    if (fileType === 'epub') {
-      return this.processEpub(bookId, filePath, fileType);
-    }
-
-    if (fileType === 'pdf') {
-      return this.processPdf(bookId, title, filePath);
+    switch (fileType) {
+      case 'txt':
+        return this.processTxt(title, filePath);
+      case 'epub':
+        return this.processEpub(bookId, filePath, fileType);
+      case 'pdf':
+        return this.processPdf(bookId, title, filePath);
+      case 'mobi':
+      // TODO: return this.processMobi(bookId, title, filePath);
     }
 
     throw new Error(`File type ${fileType} not yet supported for text extraction.`);
@@ -106,14 +122,13 @@ export class TextProcessorService {
   }
 
   private async processEpub(bookId: string, filePath: string, fileType: string) {
-    let coverPath: string = '';
     let extractedImages: Record<string, string> = {};
 
     try {
       const epub = await EPub.createAsync(filePath);
       if (!epub) throw new Error('EPUB object is null or undefined');
 
-      console.log(`📖 epub :`, epub.flow, epub.manifest, epub.metadata);
+      // console.log(`📖 epub :`, epub.flow, epub.manifest, epub.metadata);
 
       const toc = epub.flow;
       if (!toc || toc.length === 0) throw new Error('EPUB has no chapters or content');
@@ -122,7 +137,6 @@ export class TextProcessorService {
       const allLines: string[] = [];
       let cumulativeLines = 0;
       extractedImages = await this.extractAllImages(epub, bookId);
-      coverPath = await this.extractCover(epub, bookId);
 
       for (const [index, chapter] of toc.entries()) {
         // Identify non-story chapters by ID or HREF
@@ -161,16 +175,24 @@ export class TextProcessorService {
             .replace(/&#13;/g, '\n') // Convert CR entity
             .replace(/&#10;/g, '\n') // Convert LF entity
             // .replace(/nrvhad\s*/gi, '') // Strip common OCR artifacts
-            .replace(/<\/(p|div|h1|h2|h3|h4|h5|h6)>/gi, '\n\n') // Replace all block-level closing tags with double newlines
-            .replace(/<br\s*\/?>/gi, ' ') // Replace standalone line breaks with a single space
+            .replace(/<\/(p|div|h1|h2|h3|h4|h5|h6)>/gi, '\n\n') // Block element -> paragraph breaks
+            .replace(/<br\s*\/?>/gi, ' ') // Line breaks -> single space
             .replace(/<[^>]*>/g, ' ') // Strip all remaining tags
-            .replace(/&nbsp;/g, ' ') // Strip HTML entities
+            .replace(/&nbsp;/g, ' ') // HTML entities
+            .replace(/&quot;/g, ' ') // HTML entities
+            .replace(/&apos;/g, ' ') // HTML entities
+            .replace(/&amp;/g, ' ') // HTML entities
+            .replace(/&lt;/g, ' ') // HTML entities
+            .replace(/&gt;/g, ' ') // HTML entities
             .replace(/[ \t]+/g, ' ') // Collapse horizontal tabs/spaces
-            .replace(/\n\s*\n/g, '\n\n') // Ensure no more than two newlines
+            .replace(/\n[ \t]+/g, ' ') // Strip leading shitespace on lines
+            .replace(/[ \t]+\n/g, ' ') // Strip trailing shitespace on lines
+            .replace(/\n{3,}/g, '\n\n') // Max 2 newlines (paragraph separator)
+            // .replace(/\n\s*\n/g, '\n\n') // Ensure no more than two newlines
             .trim();
 
           if (index < toc.length - 10) {
-            console.log(`cleanText :`, cleanText.slice(0, 500));
+            // console.log(`cleanText :`, cleanText.slice(0, 500));
           }
 
           if (cleanText) {
@@ -239,16 +261,11 @@ export class TextProcessorService {
       const lang = this.detectLanguage(allLines.slice(0, 10).join(' '));
       console.log(`📖 EPUB parsed: ${chapters.length} chapters, ${allLines.length} lines`);
 
-      return { lang, lines: allLines, chapters, coverPath, extractedImages };
+      return { lang, lines: allLines, chapters, extractedImages };
     } catch (error) {
-      if (coverPath) {
-        await this.deleteFile(coverPath);
-        coverPath = '';
-      }
-
       const imagePaths = Object.values(extractedImages);
       if (imagePaths.length > 0) {
-        console.log(`Cleaning up ${imagePaths.length} extracted images due to error...`);
+        console.log(`Cleaning up ${imagePaths.length} extracted images`);
         for (const imgPath of imagePaths) {
           await this.deleteFile(imgPath);
         }
@@ -299,47 +316,15 @@ export class TextProcessorService {
     return imageMap;
   }
 
-  private async extractCover(epub: EPub, bookId: string): Promise<string> {
-    let coverId = epub.metadata.cover;
-
-    // Fallback: Search manifest for common IDs or EPUB 3 properties
-    if (!coverId) {
-      const manifest = epub.manifest;
-      coverId = Object.keys(manifest).find((id) => {
-        const item = manifest[id] as EpubManifest;
-        // Check for EPUB 3 property or common naming conventions
-        return item.properties === 'cover-image' || id.toLowerCase().includes('cover') || item.href?.toLowerCase().includes('cover');
-      });
-    }
-
-    // Last Resort: Use the first image in the entire manifest
-    if (!coverId) {
-      coverId = Object.keys(epub.manifest).find((id) => epub.manifest[id]['media-type']?.startsWith('image/'));
-    }
-
-    if (coverId) {
-      try {
-        const [buffer, mimeType] = await epub.getImageAsync(coverId);
-        const extension = mimeType.split('/')[1] || 'jpg';
-        const coverPath = `${bookId}.${extension}`;
-        fs.writeFileSync(path.join(this.uploadsDir, coverPath), buffer);
-        return coverPath;
-      } catch (error) {
-        console.error('❌ Cover extraction failed, skipping:', error);
-      }
-    }
-    return '';
-  }
-
-  // Since we are moving to MongoDB-only, we can eventually
-  // remove this, but for now, we clean up the temp upload file.
   private deleteFile = async (rawPath: string | undefined) => {
     if (!rawPath) return;
 
     try {
       const fileName = path.basename(rawPath);
       const fullPath = path.join(this.uploadsDir, fileName);
-      fs.unlinkSync(fullPath);
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath);
+      }
     } catch (error) {
       console.error(`❌ Failed to delete file at ${rawPath}:`, error);
     }

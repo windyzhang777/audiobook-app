@@ -16,12 +16,12 @@ import {
   SearchMatch,
 } from '@audiobook/shared';
 import fs from 'fs';
-import { writeFile } from 'fs/promises';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { uploadsDir } from '../index';
 import { BookRepository } from '../repositories/book';
-import { ScraperService } from './ScraperService';
+import { CoverService } from './coverService';
+import { ScraperService } from './scraperService';
 import { TextProcessorService } from './textProcessorService';
 
 interface SaveBook {
@@ -45,6 +45,7 @@ export class BookService {
     private bookRepository: BookRepository,
     private textProcessorService: TextProcessorService,
     private scraperService: ScraperService,
+    private coverService: CoverService,
   ) {
     // Ensure temp directory exists
     this.ensureDirectories();
@@ -73,14 +74,16 @@ export class BookService {
   ): Promise<Book> => {
     const bookId = uuidv4();
 
-    // STAGE 1: Discovery - gets Title, Cover URL, and all chapter URLs
+    // Discovery - gets Title, Cover URL, and all chapter URLs
     const { title, coverUrl, chapters } = await this.scraperService.discoverBook(url);
     onStatus?.(`Found ${chapters.length} chapters for ${title}...`, title);
     await this.checkExisting(title, url, onError);
 
-    // Download cover Image
-    let coverPath = await this.downloadCover(bookId, coverUrl);
+    // Download cover before content scraping
+    onStatus?.('Download cover...', title);
+    let coverPath = coverUrl ? await this.coverService.downloadCover(bookId, coverUrl) : undefined;
 
+    // Create book entry with cover
     const book = await this.saveBookToRepository({
       _id: bookId,
       title,
@@ -94,7 +97,7 @@ export class BookService {
       coverPath: coverPath ? `/uploads/${coverPath}` : undefined,
     });
 
-    // STAGE 2: Initial Hydration - scrape the first batch of chapters immediately
+    // HydratE initial chapters
     const batchSize = Math.min(chapters.length, CHAPTER_SIZE);
     onStatus?.(`Hydrating first ${batchSize} chapters...`);
     await this.hydrateInitialChapters(bookId, chapters.slice(0, batchSize), onProgress);
@@ -220,11 +223,12 @@ export class BookService {
     return await this.bookRepository.getById(bookId);
   }
 
-  upload = async (bookTitle: string, filePath: string, fileType: string) => {
+  upload = async (bookId: string, bookTitle: string, filePath: string, fileType: string) => {
+    let coverPath;
     try {
-      const bookId = path.basename(filePath, path.extname(filePath));
-      const { lang, lines, chapters, coverPath: extractedCover, extractedImages } = await this.textProcessorService.processBookData(bookId, bookTitle, filePath, fileType);
-      const coverPath = extractedCover ? `/uploads/${extractedCover}` : undefined;
+      coverPath = await this.coverService.extractCover(bookId, filePath, fileType);
+
+      const { lang, lines, chapters, extractedImages } = await this.textProcessorService.processBookData(bookId, bookTitle, filePath, fileType);
 
       return this.saveBookToRepository({
         _id: bookId,
@@ -235,11 +239,12 @@ export class BookService {
         lang,
         localPath: filePath,
         fileType: fileType as BookFileType,
-        coverPath,
+        coverPath: coverPath ? `/uploads/${coverPath}` : undefined,
         extractedImages,
       });
     } catch (error) {
       this.deleteFile(filePath);
+      this.deleteFile(coverPath);
       throw new Error(`Failed to extract text from file: ${error}`);
     }
   };
@@ -401,7 +406,7 @@ export class BookService {
     if (found.extractedImages) {
       const imagePaths = Object.values(found.extractedImages);
       if (imagePaths.length > 0) {
-        console.log(`Cleaning up ${imagePaths.length} extracted images due to error...`);
+        console.log(`Cleaning up ${imagePaths.length} extracted images`);
         for (const imgPath of imagePaths) {
           await this.deleteFile(imgPath);
         }
@@ -450,35 +455,15 @@ export class BookService {
     return matches;
   };
 
-  private downloadCover = async (bookId: string, coverUrl?: string): Promise<string | undefined> => {
-    if (!coverUrl) return undefined;
-
-    try {
-      const response = await fetch(coverUrl);
-      const buffer = Buffer.from(await response.arrayBuffer());
-
-      const extension = coverUrl.split('.').pop()?.split('?')[0] || 'jpg';
-      const fileName = `${bookId}.${extension}`;
-      const filePath = path.join(this.uploadsDir, fileName);
-
-      await writeFile(filePath, buffer);
-
-      return fileName;
-    } catch (error) {
-      console.error(`❌ Failed to download cover from ${coverUrl}:`, error);
-      return undefined;
-    }
-  };
-
-  // Since we are moving to MongoDB-only, we can eventually
-  // remove this, but for now, we clean up the temp upload file.
   private deleteFile = async (rawPath: string | undefined) => {
     if (!rawPath) return;
 
     try {
       const fileName = path.basename(rawPath);
       const fullPath = path.join(this.uploadsDir, fileName);
-      fs.unlinkSync(fullPath);
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath);
+      }
     } catch (error) {
       console.error(`❌ Failed to delete file at ${rawPath}:`, error);
     }

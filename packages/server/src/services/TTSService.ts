@@ -10,7 +10,7 @@ export class TTSGoogle {
   private client: TextToSpeechClient | null = null;
   private useMock = process.env.NODE_ENV === 'development' || process.env.MOCK_TTS === 'true';
 
-  async synthesize(text: string, languageCode: string = 'en-US'): Promise<Uint8Array | string | null | undefined> {
+  synthesize = async (text: string, languageCode: string = 'en-US'): Promise<Uint8Array | string | null | undefined> => {
     if (this.useMock) {
       console.log(`[MOCK TTS] Synthesizing: "${text.substring(0, 20)}..."`);
       // Return a valid mock buffer immediately and EXIT
@@ -35,14 +35,14 @@ export class TTSGoogle {
       console.error(`❌ TTS Synthesis Error for ${languageCode}:`, error);
       throw error;
     }
-  }
+  };
 
   // Lists available voices for a specific language.
-  async getVoices(languageCode: string = 'en-US') {
+  getVoices = async (languageCode: string = 'en-US') => {
     if (this.useMock) return [];
 
     if (!this.client) this.client = new TextToSpeechClient();
     const [result] = await this.client.listVoices({ languageCode });
     return result.voices;
-  }
+  };
 }

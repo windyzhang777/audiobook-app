@@ -1,6 +1,6 @@
 import type { ScrapeProgress } from '@/common/useBookScrape';
 import { ChunkedUploader } from '@/services/ChunkedUploader';
-import { UPLOAD_CHUNK_SIZE, type Book, type BookContentPaginated, type BookSetting, type ChunkedUploadConfig, type SearchMatch } from '@audiobook/shared';
+import { type Book, type BookContentPaginated, type BookSetting, type ChunkedUploadConfig, type SearchMatch } from '@audiobook/shared';
 
 const getErrorMessage = async (response: Response, message?: string): Promise<string> => {
   try {
@@ -126,27 +126,6 @@ export const api = {
       return response.json();
     },
 
-    /**
-     * Legacy upload (simple, for small files < 1MB)
-     */
-    upload: async (file: File, options?: RequestInit): Promise<Book> => {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('/api/books/upload', {
-        ...options,
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorMessage = await getErrorMessage(response);
-        throw new Error(errorMessage);
-      }
-
-      return response.json();
-    },
-
     updateWithCover: async (_id: string, updates: Partial<Book>, file: File | null): Promise<Book> => {
       const formData = new FormData();
 
@@ -169,6 +148,7 @@ export const api = {
     },
 
     update: async (_id: string, updates: Partial<Book>): Promise<Book> => {
+      console.log(`update`);
       const response = await fetch(`/api/books/${_id}`, {
         method: 'PATCH',
         headers: {
@@ -226,6 +206,7 @@ export const api = {
     },
 
     updateSetting: async (_id: string, updates: Partial<BookSetting>): Promise<BookSetting> => {
+      console.log(`updateSetting`);
       const response = await fetch(`/api/books/${_id}/setting`, {
         method: 'PATCH',
         headers: {
@@ -275,38 +256,9 @@ export const api = {
     /**
      * Upload book with chunked upload (recommended for files > 1MB)
      */
-    uploadChunked: async (file: File, config?: Partial<ChunkedUploadConfig>) => {
+    upload: async (file: File, config?: Partial<ChunkedUploadConfig>) => {
       const uploader = new ChunkedUploader(file, config);
       return { book: uploader.upload(), uploader };
-    },
-
-    /**
-     * Smart upload - automatically chooses chunked or simple based on file size
-     */
-    smartUpload: async (file: File, config?: Partial<ChunkedUploadConfig>) => {
-      const threshold = UPLOAD_CHUNK_SIZE;
-
-      if (file.size > threshold) {
-        return api.upload.uploadChunked(file, config);
-      } else {
-        const controller = new AbortController();
-        return {
-          book: api.books.upload(file, { signal: controller.signal }),
-          uploader: {
-            cancel: () => controller.abort(),
-          },
-        };
-      }
-    },
-
-    getCover: async (uploadId: string): Promise<{ coverPath: string | null }> => {
-      const response = await fetch(`/api/upload/cover/${uploadId}`);
-
-      if (!response.ok) {
-        const errorMessage = await getErrorMessage(response);
-        throw new Error(errorMessage);
-      }
-      return response.json();
     },
   },
 };

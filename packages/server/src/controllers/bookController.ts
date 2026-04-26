@@ -1,6 +1,5 @@
-import { Book, fixEncoding, PAGE_SIZE } from '@audiobook/shared';
+import { Book, PAGE_SIZE } from '@audiobook/shared';
 import { Request, Response } from 'express';
-import path from 'path';
 import { AudiobookService } from '../services/audiobookService';
 import { BookService } from '../services/bookService';
 
@@ -113,33 +112,6 @@ export class BookController {
       const message = error instanceof Error ? error.message : 'Truncate and Re-hydration failed';
       console.error(`❌ [Controller] ${message}`, error);
       res.status(500).json({ message });
-    }
-  };
-
-  /**
-   * Legacy upload (simple, for small files < 1MB)
-   */
-  upload = async (req: Request, res: Response) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ message: 'No file uploaded' });
-      }
-
-      const fileType = req.file.originalname.split('.').pop()?.toLowerCase();
-      if (!fileType) {
-        return res.status(400).json({ message: 'Invalid file type' });
-      }
-
-      const baseName = path.basename(req.file.originalname, path.extname(req.file.originalname));
-      const cleanTitle = fixEncoding(baseName);
-
-      await this.bookService.checkExisting(cleanTitle, req.file.path);
-      const book = await this.bookService.upload(cleanTitle, req.file.path, fileType);
-
-      res.status(201).json(book);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error adding book';
-      return res.status(400).json({ message });
     }
   };
 

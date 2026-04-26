@@ -1,4 +1,4 @@
-import { getFileTitle } from '@audiobook/shared';
+import { parseFileName } from '@/utils';
 import { Request, Response } from 'express';
 import { BookService } from '../services/bookService';
 import { UploadService } from '../services/uploadService';
@@ -21,7 +21,7 @@ export class UploadController {
         return res.status(400).json({ message: 'Missing required fields: fileName, fileSize, totalChunks' });
       }
 
-      const { title } = getFileTitle(fileName);
+      const { title } = parseFileName(fileName);
       await this.bookService.checkExisting(title);
 
       // Initialize upload session
@@ -71,11 +71,10 @@ export class UploadController {
 
       // Merge chunks and get final file path
       const { filePath, fileName } = await this.uploadService.finalizeUpload(uploadId);
-
-      const { fileType, title } = getFileTitle(fileName);
+      const { title, fileType } = parseFileName(fileName);
 
       // Create book using BookService
-      const book = await this.bookService.upload(title, filePath, fileType);
+      const book = await this.bookService.upload(uploadId, title, filePath, fileType);
 
       res.status(200).json(book);
     } catch (error) {

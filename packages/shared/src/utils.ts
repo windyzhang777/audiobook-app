@@ -33,7 +33,7 @@ export const removeMarker = (line: string) => {
   return cleanLine;
 };
 
-export const getFileTitle = (fileName: string) => {
+export const parseFileName = (fileName: string) => {
   const parts = fileName.split('.');
   const fileType = parts.pop() || 'txt';
   const title = parts.join('_');
